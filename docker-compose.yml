@@ -1,0 +1,14 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: aduser
+      POSTGRES_PASSWORD: adpassword
+      POSTGRES_DB: admanager
+    ports:
+      - "5432:5432"
+    volumes:
+      - admanager_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  admanager_postgres_data:
