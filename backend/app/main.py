@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 
 from app.database import Base, engine
-from app.routers import ads, campaigns
+from app.routers import ads, campaigns, events
 
 
 Base.metadata.create_all(bind=engine)
@@ -14,6 +14,7 @@ app = FastAPI(
 
 app.include_router(campaigns.router)
 app.include_router(ads.router)
+app.include_router(events.router)
 
 
 @app.get("/")

@@ -64,3 +64,20 @@ class AdServeResponse(BaseModel):
     image_url: str
     landing_page_url: str
     bid_price: float
+
+
+
+class AdEventCreate(BaseModel):
+    event_id: str
+    campaign_id: int
+    user_id: str
+
+
+class AdEventResponse(BaseModel):
+    event_id: str
+    campaign_id: int
+    user_id: str
+    event_type: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
