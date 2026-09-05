@@ -48,3 +48,19 @@ class CampaignResponse(CampaignBase):
     impressions: int
     clicks: int
     created_at: datetime
+
+
+
+class AdServeRequest(BaseModel):
+    user_id: str
+    country: str
+    device: str
+    category: str | None = None
+
+
+class AdServeResponse(BaseModel):
+    campaign_id: int
+    headline: str
+    image_url: str
+    landing_page_url: str
+    bid_price: float
