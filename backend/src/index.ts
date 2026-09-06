@@ -1,8 +1,8 @@
 import express from "express";
 
-import campaignRouter from "./routes/campaign.routes";
-import adRouter from "./routes/ad.routes";
-import eventRouter from "./routes/event.routes";
+import campaignRouter from "./routes/campaign.routes.js";
+import adRouter from "./routes/ad.routes.js";
+import eventRouter from "./routes/event.routes.js";
 
 
 const app = express();

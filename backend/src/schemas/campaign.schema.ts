@@ -33,3 +33,9 @@ export const campaignUpdateSchema = z.object({
 
   isActive: z.boolean().optional(),
 });
+
+export type CampaignCreateInput =
+  z.infer<typeof campaignCreateSchema>;
+
+export type CampaignUpdateInput =
+  z.infer<typeof campaignUpdateSchema>;

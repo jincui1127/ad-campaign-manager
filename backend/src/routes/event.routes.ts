@@ -1,10 +1,10 @@
 import { Router } from "express";
 
-import { adEventSchema } from "../schemas/event.schema";
+import { adEventSchema } from "../schemas/event.schema.js";
 import {
   recordClick,
   recordImpression,
-} from "../services/tracking.service";
+} from "../services/tracking.service.js";
 
 
 const router = Router();

@@ -1,9 +1,7 @@
-import { prisma } from "../lib/prisma";
-import {
-  getDailySpend,
-  hasReachedFrequencyCap,
-} from "./ad-serving.service";
-import { Prisma } from "../generated/prisma/client";
+import { prisma } from "../lib/prisma.js";
+
+import { Prisma } from "../generated/prisma/client.js";
+import { AD_CONFIG } from "../config/ad.config.js";
 
 const MAX_TRANSACTION_RETRIES = 3;
 
@@ -55,7 +53,7 @@ export async function recordImpression(
 
           // 3. Frequency cap
           const windowStart = new Date(
-            Date.now() - 60 * 60 * 1000
+            Date.now() - AD_CONFIG.frequencyWindowHours * 60 * 60 * 1000
           );
 
           const impressionCount =
@@ -70,7 +68,9 @@ export async function recordImpression(
               },
             });
 
-          if (impressionCount >= 3) {
+          if (
+            impressionCount >= AD_CONFIG.frequencyCap
+          ) {
             return null;
           }
 

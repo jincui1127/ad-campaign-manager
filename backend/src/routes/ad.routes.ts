@@ -1,7 +1,7 @@
 import { Router } from "express";
 
-import { adServeSchema } from "../schemas/ad.schema";
-import { selectAd } from "../services/ad-serving.service";
+import { adServeSchema } from "../schemas/ad.schema.js";
+import { selectAd } from "../services/ad-serving.service.js";
 
 
 const router = Router();

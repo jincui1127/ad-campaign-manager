@@ -1,8 +1,5 @@
-import { prisma } from "../lib/prisma";
-
-
-const FREQUENCY_CAP = 3;
-const FREQUENCY_WINDOW_HOURS = 1;
+import { prisma } from "../lib/prisma.js";
+import { AD_CONFIG } from "../config/ad.config.js";
 
 
 export async function hasReachedFrequencyCap(
@@ -10,7 +7,7 @@ export async function hasReachedFrequencyCap(
   campaignId: number
 ): Promise<boolean> {
   const windowStart = new Date(
-    Date.now() - FREQUENCY_WINDOW_HOURS * 60 * 60 * 1000
+    Date.now() - AD_CONFIG.frequencyWindowHours * 60 * 60 * 1000
   );
 
   const impressionCount = await prisma.adEvent.count({
@@ -24,7 +21,7 @@ export async function hasReachedFrequencyCap(
     },
   });
 
-  return impressionCount >= FREQUENCY_CAP;
+  return impressionCount >= AD_CONFIG.frequencyCap;
 }
 
 
@@ -62,7 +59,7 @@ export async function selectAd(request: {
   userId: string;
   country: string;
   device: string;
-  category?: string;
+  category?: string | undefined;
 }) {
   const candidates = await prisma.campaign.findMany({
     where: {

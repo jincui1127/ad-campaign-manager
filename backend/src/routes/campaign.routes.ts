@@ -3,14 +3,14 @@ import { Router } from "express";
 import {
   campaignCreateSchema,
   campaignUpdateSchema,
-} from "../schemas/campaign.schema";
+} from "../schemas/campaign.schema.js";
 
 import {
   createCampaign,
   getCampaignById,
   getCampaigns,
   updateCampaign,
-} from "../services/campaign.service";
+} from "../services/campaign.service.js";
 
 
 const router = Router();
