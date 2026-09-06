@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 
 from app import models, schemas
 
+from app.services.ad_serving import has_reached_frequency_cap
 
 def record_impression(
     db: Session,
@@ -22,6 +23,13 @@ def record_impression(
         return None
 
     if not campaign.is_active:
+        return None
+
+    if has_reached_frequency_cap(
+       db,
+       event.user_id,
+       event.campaign_id,
+    ):
         return None
 
     if campaign.spent + campaign.bid_price > campaign.total_budget:
