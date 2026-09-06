@@ -213,6 +213,23 @@ export async function recordClick(
           return null;
         }
 
+        const impression =
+          await tx.adEvent.findFirst({
+            where: {
+              campaignId: event.campaignId,
+              userId: event.userId,
+              eventType: "impression",
+            },
+
+            orderBy: {
+              createdAt: "desc",
+            },
+          });
+
+        if (!impression) {
+          return null;
+        }
+
         const newEvent =
           await tx.adEvent.create({
             data: {
