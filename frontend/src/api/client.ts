@@ -19,6 +19,21 @@ export async function getCampaigns(): Promise<Campaign[]> {
 }
 
 
+export async function getCampaignById(
+  id: number
+): Promise<Campaign> {
+  const response = await fetch(
+    `${API_BASE}/campaigns/${id}`
+  );
+
+  if (!response.ok) {
+    throw new Error("Failed to load campaign");
+  }
+
+  return response.json();
+}
+
+
 export async function createCampaign(
   data: CampaignInput
 ): Promise<Campaign> {

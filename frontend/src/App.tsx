@@ -1,6 +1,9 @@
 import CampaignDashboard
   from "./components/CampaignDashboard";
 
+import AdInspector
+  from "./components/AdInspector";
+
 import "./App.css";
 
 
@@ -19,6 +22,8 @@ function App() {
       </header>
 
       <CampaignDashboard />
+
+      <AdInspector />
     </main>
   );
 }
