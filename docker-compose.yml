@@ -1,14 +1,54 @@
 services:
   db:
     image: postgres:16
+
     environment:
       POSTGRES_USER: aduser
       POSTGRES_PASSWORD: adpassword
       POSTGRES_DB: admanager
+
     ports:
       - "5432:5432"
+
     volumes:
       - admanager_postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U aduser -d admanager"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+
+  backend:
+    build:
+      context: ./backend
+
+    environment:
+      DATABASE_URL: postgresql://aduser:adpassword@db:5432/admanager
+
+    ports:
+      - "8000:8000"
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+
+  frontend:
+    build:
+      context: ./frontend
+
+    ports:
+      - "5173:80"
+
+    depends_on:
+      - backend
+
 
 volumes:
   admanager_postgres_data:
