@@ -11,8 +11,10 @@ async function main() {
       {
         name: "Nike Running AU",
         headline: "Run Faster with Nike",
-        imageUrl: "https://example.com/nike-running.jpg",
-        landingPageUrl: "https://example.com/nike-running",
+        imageUrl:
+          "https://placehold.co/600x300?text=Nike+Running",
+        landingPageUrl:
+          "https://example.com/nike-running",
         totalBudget: 100,
         dailyBudget: 20,
         bidPrice: 0.8,
@@ -24,8 +26,10 @@ async function main() {
       {
         name: "Adidas Sports AU",
         headline: "Impossible Is Nothing",
-        imageUrl: "https://example.com/adidas.jpg",
-        landingPageUrl: "https://example.com/adidas",
+        imageUrl:
+          "https://placehold.co/600x300?text=Adidas+Sports",
+        landingPageUrl:
+          "https://example.com/adidas",
         totalBudget: 120,
         dailyBudget: 25,
         bidPrice: 0.6,
@@ -37,8 +41,10 @@ async function main() {
       {
         name: "Tech Campaign AU",
         headline: "Discover the Latest Technology",
-        imageUrl: "https://example.com/tech.jpg",
-        landingPageUrl: "https://example.com/tech",
+        imageUrl:
+          "https://placehold.co/600x300?text=Technology",
+        landingPageUrl:
+          "https://example.com/tech",
         totalBudget: 80,
         dailyBudget: 15,
         bidPrice: 0.5,
@@ -50,8 +56,10 @@ async function main() {
       {
         name: "Paused Campaign",
         headline: "Paused Advertisement",
-        imageUrl: "https://example.com/paused.jpg",
-        landingPageUrl: "https://example.com/paused",
+        imageUrl:
+          "https://placehold.co/600x300?text=Paused+Campaign",
+        landingPageUrl:
+          "https://example.com/paused",
         totalBudget: 100,
         dailyBudget: 20,
         bidPrice: 1.2,

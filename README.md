@@ -175,7 +175,6 @@ ad-campaign-manager/
 │   │   └── seed.ts
 │   ├── src/
 │   │   ├── config/
-│   │   ├── generated/
 │   │   ├── lib/
 │   │   ├── routes/
 │   │   ├── schemas/
