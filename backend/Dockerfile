@@ -8,6 +8,8 @@ RUN npm ci
 
 COPY . .
 
+ENV NODE_ENV=production
+
 EXPOSE 8000
 
 CMD ["sh", "-c", "npx prisma generate && npx prisma migrate deploy && npm start"]

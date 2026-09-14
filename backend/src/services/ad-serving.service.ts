@@ -7,21 +7,29 @@ export async function hasReachedFrequencyCap(
   campaignId: number
 ): Promise<boolean> {
   const windowStart = new Date(
-    Date.now() - AD_CONFIG.frequencyWindowHours * 60 * 60 * 1000
+    Date.now() -
+      AD_CONFIG.frequencyWindowHours *
+        60 *
+        60 *
+        1000
   );
 
-  const impressionCount = await prisma.adEvent.count({
-    where: {
-      userId,
-      campaignId,
-      eventType: "impression",
-      createdAt: {
-        gte: windowStart,
+  const impressionCount =
+    await prisma.adEvent.count({
+      where: {
+        userId,
+        campaignId,
+        eventType: "impression",
+        createdAt: {
+          gte: windowStart,
+        },
       },
-    },
-  });
+    });
 
-  return impressionCount >= AD_CONFIG.frequencyCap;
+  return (
+    impressionCount >=
+    AD_CONFIG.frequencyCap
+  );
 }
 
 
@@ -38,18 +46,20 @@ export async function getDailySpend(
     )
   );
 
-  const result = await prisma.adEvent.aggregate({
-    where: {
-      campaignId,
-      eventType: "impression",
-      createdAt: {
-        gte: dayStart,
+  const result =
+    await prisma.adEvent.aggregate({
+      where: {
+        campaignId,
+        eventType: "impression",
+        createdAt: {
+          gte: dayStart,
+        },
       },
-    },
-    _sum: {
-      cost: true,
-    },
-  });
+
+      _sum: {
+        cost: true,
+      },
+    });
 
   return result._sum.cost ?? 0;
 }
@@ -61,51 +71,69 @@ export async function selectAd(request: {
   device: string;
   category?: string | undefined;
 }) {
-  const candidates = await prisma.campaign.findMany({
-    where: {
-      isActive: true,
+  const categoryFilter =
+    request.category !== undefined
+      ? {
+          OR: [
+            {
+              category: null,
+            },
+            {
+              category:
+                request.category,
+            },
+          ],
+        }
+      : {
+          category: null,
+        };
 
-      country: request.country,
-      device: request.device,
+  const candidates =
+    await prisma.campaign.findMany({
+      where: {
+        isActive: true,
+        country: request.country,
+        device: request.device,
+        ...categoryFilter,
+      },
 
-      ...(request.category !== undefined
-        ? { category: request.category }
-        : {}),
-    },
-
-    orderBy: {
-      bidPrice: "desc",
-    },
-  });
+      orderBy: {
+        bidPrice: "desc",
+      },
+    });
 
   for (const campaign of candidates) {
-  if (
-    campaign.spent + campaign.bidPrice >
-    campaign.totalBudget
-  ) {
-    continue;
+    if (
+      campaign.spent +
+        campaign.bidPrice >
+      campaign.totalBudget
+    ) {
+      continue;
+    }
+
+    const dailySpend =
+      await getDailySpend(
+        campaign.id
+      );
+
+    if (
+      dailySpend +
+        campaign.bidPrice >
+      campaign.dailyBudget
+    ) {
+      continue;
+    }
+
+    const capped =
+      await hasReachedFrequencyCap(
+        request.userId,
+        campaign.id
+      );
+
+    if (!capped) {
+      return campaign;
+    }
   }
-
-  const dailySpend = await getDailySpend(
-    campaign.id
-  );
-
-  if (
-    dailySpend + campaign.bidPrice >
-    campaign.dailyBudget
-  ) {
-    continue;
-  }
-
-  const capped = await hasReachedFrequencyCap(
-    request.userId,
-    campaign.id
-  );
-
-  if (!capped) {
-    return campaign;
-  }
-}
 
   return null;
 }

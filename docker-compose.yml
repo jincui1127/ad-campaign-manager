@@ -30,6 +30,7 @@ services:
 
     environment:
       DATABASE_URL: postgresql://aduser:adpassword@db:5432/admanager
+      PORT: 8000
 
     ports:
       - "8000:8000"
@@ -37,6 +38,18 @@ services:
     depends_on:
       db:
         condition: service_healthy
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:8000/healthz').then(r => { if (!r.ok) process.exit(1); }).catch(() => process.exit(1));"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
 
   frontend:
@@ -47,7 +60,8 @@ services:
       - "5173:80"
 
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 
 volumes:
