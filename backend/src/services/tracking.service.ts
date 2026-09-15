@@ -4,8 +4,6 @@ import type { AdEvent } from "../generated/prisma/client.js";
 import type { AdTokenPayload } from "./ad-token.service.js";
 import { AD_CONFIG } from "../config/ad.config.js";
 
-const MAX_TRANSACTION_RETRIES = 3;
-
 export type TrackingFailureReason =
   | "CAMPAIGN_NOT_FOUND"
   | "CAMPAIGN_PAUSED"
@@ -49,9 +47,21 @@ function clickEventId(jti: string): string {
   return `click:${jti}`;
 }
 
-async function findDuplicateEvent(
-  eventId: string
-) {
+async function lockCampaign(
+  tx: Prisma.TransactionClient,
+  campaignId: number
+): Promise<boolean> {
+  const rows = await tx.$queryRaw<Array<{ id: number }>>`
+    SELECT "id"
+    FROM "Campaign"
+    WHERE "id" = ${campaignId}
+    FOR UPDATE
+  `;
+
+  return rows.length > 0;
+}
+
+async function findDuplicateEvent(eventId: string) {
   return prisma.adEvent.findUnique({
     where: { eventId },
   });
@@ -61,211 +71,201 @@ export async function recordImpression(
   token: AdTokenPayload
 ): Promise<TrackingResult> {
   const eventId = impressionEventId(token.jti);
+
   const chargeMicros =
     token.bidType === "CPI"
       ? BigInt(token.bidPriceMicros)
       : 0n;
 
-  for (
-    let attempt = 1;
-    attempt <= MAX_TRANSACTION_RETRIES;
-    attempt++
-  ) {
-    try {
-      return await prisma.$transaction(
-        async (tx) => {
-          const existingEvent =
-            await tx.adEvent.findUnique({
-              where: { eventId },
-            });
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const campaignExists =
+        await lockCampaign(
+          tx,
+          token.campaignId
+        );
 
-          if (existingEvent) {
-            return {
-              ok: true,
-              event: existingEvent,
-              deduped: true,
-            };
-          }
+      if (!campaignExists) {
+        return {
+          ok: false,
+          reason:
+            "CAMPAIGN_NOT_FOUND",
+        };
+      }
 
-          const campaign =
-            await tx.campaign.findUnique({
-              where: {
-                id: token.campaignId,
-              },
-            });
+      const existingEvent =
+        await tx.adEvent.findUnique({
+          where: { eventId },
+        });
 
-          if (!campaign) {
-            return {
-              ok: false,
-              reason: "CAMPAIGN_NOT_FOUND",
-            };
-          }
+      if (existingEvent) {
+        return {
+          ok: true,
+          event: existingEvent,
+          deduped: true,
+        };
+      }
 
-          if (!campaign.isActive) {
-            return {
-              ok: false,
-              reason: "CAMPAIGN_PAUSED",
-            };
-          }
-
-          const windowStart = new Date(
-            Date.now() -
-              AD_CONFIG.frequencyWindowHours *
-                60 *
-                60 *
-                1000
-          );
-
-          const impressionCount =
-            await tx.adEvent.count({
-              where: {
-                campaignId: token.campaignId,
-                userId: token.userId,
-                eventType: "impression",
-                createdAt: {
-                  gte: windowStart,
-                },
-              },
-            });
-
-          if (
-            impressionCount >=
-            AD_CONFIG.frequencyCap
-          ) {
-            return {
-              ok: false,
-              reason: "FREQUENCY_CAP_REACHED",
-            };
-          }
-
-          if (chargeMicros > 0n) {
-            if (
-              campaign.spentMicros +
-                chargeMicros >
-              campaign.totalBudgetMicros
-            ) {
-              return {
-                ok: false,
-                reason:
-                  "TOTAL_BUDGET_EXHAUSTED",
-              };
-            }
-
-            const dailySpendResult =
-              await tx.adEvent.aggregate({
-                where: {
-                  campaignId:
-                    token.campaignId,
-                  createdAt: {
-                    gte: getDayStart(),
-                  },
-                },
-                _sum: {
-                  costMicros: true,
-                },
-              });
-
-            const dailySpend =
-              dailySpendResult._sum
-                .costMicros ?? 0n;
-
-            if (
-              dailySpend + chargeMicros >
-              campaign.dailyBudgetMicros
-            ) {
-              return {
-                ok: false,
-                reason:
-                  "DAILY_BUDGET_EXHAUSTED",
-              };
-            }
-          }
-
-          const newEvent =
-            await tx.adEvent.create({
-              data: {
-                eventId,
-                campaignId:
-                  token.campaignId,
-                userId: token.userId,
-                eventType: "impression",
-                costMicros: chargeMicros,
-              },
-            });
-
-          await tx.campaign.update({
+      const campaign =
+        await tx.campaign
+          .findUniqueOrThrow({
             where: {
               id: token.campaignId,
             },
-            data: {
-              impressions: {
-                increment: 1,
+          });
+
+      if (!campaign.isActive) {
+        return {
+          ok: false,
+          reason: "CAMPAIGN_PAUSED",
+        };
+      }
+
+      const windowStart =
+        new Date(
+          Date.now() -
+            AD_CONFIG
+              .frequencyWindowHours *
+              60 *
+              60 *
+              1000
+        );
+
+      const impressionCount =
+        await tx.adEvent.count({
+          where: {
+            campaignId:
+              token.campaignId,
+            userId: token.userId,
+            eventType: "impression",
+            createdAt: {
+              gte: windowStart,
+            },
+          },
+        });
+
+      if (
+        impressionCount >=
+        AD_CONFIG.frequencyCap
+      ) {
+        return {
+          ok: false,
+          reason:
+            "FREQUENCY_CAP_REACHED",
+        };
+      }
+
+      if (chargeMicros > 0n) {
+        if (
+          campaign.spentMicros +
+            chargeMicros >
+          campaign.totalBudgetMicros
+        ) {
+          return {
+            ok: false,
+            reason:
+              "TOTAL_BUDGET_EXHAUSTED",
+          };
+        }
+
+        const dailySpendResult =
+          await tx.adEvent.aggregate({
+            where: {
+              campaignId:
+                token.campaignId,
+              createdAt: {
+                gte: getDayStart(),
               },
-              ...(chargeMicros > 0n
-                ? {
-                    spentMicros: {
-                      increment:
-                        chargeMicros,
-                    },
-                  }
-                : {}),
+            },
+            _sum: {
+              costMicros: true,
             },
           });
 
-          return {
-            ok: true,
-            event: newEvent,
-            deduped: false,
-          };
-        },
-        {
-          isolationLevel:
-            Prisma.TransactionIsolationLevel
-              .Serializable,
-        }
-      );
-    } catch (error) {
-      if (
-        error instanceof
-        Prisma.PrismaClientKnownRequestError
-      ) {
-        if (error.code === "P2002") {
-          const existingEvent =
-            await findDuplicateEvent(
-              eventId
-            );
-
-          if (existingEvent) {
-            return {
-              ok: true,
-              event: existingEvent,
-              deduped: true,
-            };
-          }
-        }
+        const dailySpend =
+          dailySpendResult._sum
+            .costMicros ?? 0n;
 
         if (
-          error.code === "P2034" &&
-          attempt <
-            MAX_TRANSACTION_RETRIES
+          dailySpend +
+            chargeMicros >
+          campaign.dailyBudgetMicros
         ) {
-          continue;
+          return {
+            ok: false,
+            reason:
+              "DAILY_BUDGET_EXHAUSTED",
+          };
         }
       }
 
-      throw error;
-    }
-  }
+      const newEvent =
+        await tx.adEvent.create({
+          data: {
+            eventId,
+            campaignId:
+              token.campaignId,
+            userId: token.userId,
+            eventType: "impression",
+            costMicros: chargeMicros,
+          },
+        });
 
-  throw new Error(
-    "Transaction failed after maximum retries"
-  );
+      await tx.campaign.update({
+        where: {
+          id: token.campaignId,
+        },
+        data: {
+          impressions: {
+            increment: 1,
+          },
+          ...(chargeMicros > 0n
+            ? {
+                spentMicros: {
+                  increment:
+                    chargeMicros,
+                },
+              }
+            : {}),
+        },
+      });
+
+      return {
+        ok: true,
+        event: newEvent,
+        deduped: false,
+      };
+    });
+  } catch (error) {
+    if (
+      error instanceof
+        Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      const existingEvent =
+        await findDuplicateEvent(
+          eventId
+        );
+
+      if (existingEvent) {
+        return {
+          ok: true,
+          event: existingEvent,
+          deduped: true,
+        };
+      }
+    }
+
+    throw error;
+  }
 }
 
 export async function recordClick(
   token: AdTokenPayload
 ): Promise<TrackingResult> {
-  const eventId = clickEventId(token.jti);
+  const eventId =
+    clickEventId(token.jti);
+
   const requiredImpressionId =
     impressionEventId(token.jti);
 
@@ -274,185 +274,177 @@ export async function recordClick(
       ? BigInt(token.bidPriceMicros)
       : 0n;
 
-  for (
-    let attempt = 1;
-    attempt <= MAX_TRANSACTION_RETRIES;
-    attempt++
-  ) {
-    try {
-      return await prisma.$transaction(
-        async (tx) => {
-          const existingEvent =
-            await tx.adEvent.findUnique({
-              where: { eventId },
-            });
+  try {
+    return await prisma.$transaction(
+      async (tx) => {
+        const campaignExists =
+          await lockCampaign(
+            tx,
+            token.campaignId
+          );
 
-          if (existingEvent) {
-            return {
-              ok: true,
-              event: existingEvent,
-              deduped: true,
-            };
-          }
+        if (!campaignExists) {
+          return {
+            ok: false,
+            reason:
+              "CAMPAIGN_NOT_FOUND",
+          };
+        }
 
-          const campaign =
-            await tx.campaign.findUnique({
+        const existingEvent =
+          await tx.adEvent.findUnique({
+            where: { eventId },
+          });
+
+        if (existingEvent) {
+          return {
+            ok: true,
+            event: existingEvent,
+            deduped: true,
+          };
+        }
+
+        const campaign =
+          await tx.campaign
+            .findUniqueOrThrow({
               where: {
-                id: token.campaignId,
+                id:
+                  token.campaignId,
               },
             });
 
-          if (!campaign) {
-            return {
-              ok: false,
-              reason: "CAMPAIGN_NOT_FOUND",
-            };
-          }
-
-          const impression =
-            await tx.adEvent.findUnique({
+        const impression =
+          await tx.adEvent
+            .findUnique({
               where: {
                 eventId:
                   requiredImpressionId,
               },
             });
 
+        if (
+          !impression ||
+          impression.campaignId !==
+            token.campaignId ||
+          impression.userId !==
+            token.userId ||
+          impression.eventType !==
+            "impression"
+        ) {
+          return {
+            ok: false,
+            reason:
+              "NO_PRIOR_IMPRESSION",
+          };
+        }
+
+        if (chargeMicros > 0n) {
           if (
-            !impression ||
-            impression.campaignId !==
-              token.campaignId ||
-            impression.userId !==
-              token.userId ||
-            impression.eventType !==
-              "impression"
+            campaign.spentMicros +
+              chargeMicros >
+            campaign.totalBudgetMicros
           ) {
             return {
               ok: false,
               reason:
-                "NO_PRIOR_IMPRESSION",
+                "TOTAL_BUDGET_EXHAUSTED",
             };
           }
 
-          if (chargeMicros > 0n) {
-            if (
-              campaign.spentMicros +
-                chargeMicros >
-              campaign.totalBudgetMicros
-            ) {
-              return {
-                ok: false,
-                reason:
-                  "TOTAL_BUDGET_EXHAUSTED",
-              };
-            }
-
-            const dailySpendResult =
-              await tx.adEvent.aggregate({
+          const dailySpendResult =
+            await tx.adEvent
+              .aggregate({
                 where: {
                   campaignId:
                     token.campaignId,
                   createdAt: {
-                    gte: getDayStart(),
+                    gte:
+                      getDayStart(),
                   },
                 },
                 _sum: {
-                  costMicros: true,
+                  costMicros:
+                    true,
                 },
               });
 
-            const dailySpend =
-              dailySpendResult._sum
-                .costMicros ?? 0n;
+          const dailySpend =
+            dailySpendResult._sum
+              .costMicros ?? 0n;
 
-            if (
-              dailySpend + chargeMicros >
-              campaign.dailyBudgetMicros
-            ) {
-              return {
-                ok: false,
-                reason:
-                  "DAILY_BUDGET_EXHAUSTED",
-              };
-            }
-          }
-
-          const newEvent =
-            await tx.adEvent.create({
-              data: {
-                eventId,
-                campaignId:
-                  token.campaignId,
-                userId: token.userId,
-                eventType: "click",
-                costMicros: chargeMicros,
-              },
-            });
-
-          await tx.campaign.update({
-            where: {
-              id: token.campaignId,
-            },
-            data: {
-              clicks: {
-                increment: 1,
-              },
-              ...(chargeMicros > 0n
-                ? {
-                    spentMicros: {
-                      increment:
-                        chargeMicros,
-                    },
-                  }
-                : {}),
-            },
-          });
-
-          return {
-            ok: true,
-            event: newEvent,
-            deduped: false,
-          };
-        },
-        {
-          isolationLevel:
-            Prisma.TransactionIsolationLevel
-              .Serializable,
-        }
-      );
-    } catch (error) {
-      if (
-        error instanceof
-        Prisma.PrismaClientKnownRequestError
-      ) {
-        if (error.code === "P2002") {
-          const existingEvent =
-            await findDuplicateEvent(
-              eventId
-            );
-
-          if (existingEvent) {
+          if (
+            dailySpend +
+              chargeMicros >
+            campaign.dailyBudgetMicros
+          ) {
             return {
-              ok: true,
-              event: existingEvent,
-              deduped: true,
+              ok: false,
+              reason:
+                "DAILY_BUDGET_EXHAUSTED",
             };
           }
         }
 
-        if (
-          error.code === "P2034" &&
-          attempt <
-            MAX_TRANSACTION_RETRIES
-        ) {
-          continue;
-        }
+        const newEvent =
+          await tx.adEvent.create({
+            data: {
+              eventId,
+              campaignId:
+                token.campaignId,
+              userId:
+                token.userId,
+              eventType: "click",
+              costMicros:
+                chargeMicros,
+            },
+          });
+
+        await tx.campaign.update({
+          where: {
+            id: token.campaignId,
+          },
+          data: {
+            clicks: {
+              increment: 1,
+            },
+            ...(chargeMicros > 0n
+              ? {
+                  spentMicros: {
+                    increment:
+                      chargeMicros,
+                  },
+                }
+              : {}),
+          },
+        });
+
+        return {
+          ok: true,
+          event: newEvent,
+          deduped: false,
+        };
       }
+    );
+  } catch (error) {
+    if (
+      error instanceof
+        Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      const existingEvent =
+        await findDuplicateEvent(
+          eventId
+        );
 
-      throw error;
+      if (existingEvent) {
+        return {
+          ok: true,
+          event: existingEvent,
+          deduped: true,
+        };
+      }
     }
-  }
 
-  throw new Error(
-    "Transaction failed after maximum retries"
-  );
+    throw error;
+  }
 }

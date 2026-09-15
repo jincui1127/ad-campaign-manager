@@ -12,9 +12,7 @@ import {
   issueAdToken,
   verifyAdToken,
 } from "../src/services/ad-token.service.js";
-import type {
-  AdTokenPayload,
-} from "../src/services/ad-token.service.js";
+import type { AdTokenPayload } from "../src/services/ad-token.service.js";
 import {
   recordClick,
   recordImpression,
@@ -44,11 +42,16 @@ async function createCampaign(
     data: {
       name: "Test Campaign",
       headline: "Test Headline",
-      imageUrl: "https://placehold.co/600x300?text=Test",
-      landingPageUrl: "https://example.com/test",
-      totalBudgetMicros: dollarsToMicros(100),
-      dailyBudgetMicros: dollarsToMicros(100),
-      bidPriceMicros: dollarsToMicros(1),
+      imageUrl:
+        "https://placehold.co/600x300?text=Test",
+      landingPageUrl:
+        "https://example.com/test",
+      totalBudgetMicros:
+        dollarsToMicros(100),
+      dailyBudgetMicros:
+        dollarsToMicros(100),
+      bidPriceMicros:
+        dollarsToMicros(1),
       bidType: "CPI",
       countries: ["AU"],
       devices: ["mobile"],
@@ -60,7 +63,9 @@ async function createCampaign(
 }
 
 function createTrackingPayload(
-  campaign: Awaited<ReturnType<typeof createCampaign>>,
+  campaign: Awaited<
+    ReturnType<typeof createCampaign>
+  >,
   userId: string,
   jti: string
 ): AdTokenPayload {
@@ -69,510 +74,819 @@ function createTrackingPayload(
     campaignId: campaign.id,
     userId,
     bidType: campaign.bidType,
-    bidPriceMicros: campaign.bidPriceMicros.toString(),
-    exp: Math.floor(Date.now() / 1000) + 900,
+    bidPriceMicros:
+      campaign.bidPriceMicros.toString(),
+    exp:
+      Math.floor(Date.now() / 1000) +
+      900,
   };
 }
 
-describe("core ad delivery behaviour", () => {
-  beforeEach(async () => {
-    await prisma.adEvent.deleteMany();
-    await prisma.campaign.deleteMany();
-  });
+describe(
+  "core ad delivery behaviour",
+  () => {
+    beforeEach(async () => {
+      await prisma.adEvent
+        .deleteMany();
 
-  afterAll(async () => {
-    await prisma.$disconnect();
-  });
-
-  it("returns null when no campaign matches", async () => {
-    await createCampaign();
-
-    const ad = await selectAd({
-      userId: "no-match-user",
-      country: "JP",
-      device: "tablet",
-      category: "finance",
+      await prisma.campaign
+        .deleteMany();
     });
 
-    expect(ad).toBeNull();
-  });
+    afterAll(async () => {
+      await prisma.$disconnect();
+    });
 
-  it(
-    "does not double-count the same impression opportunity",
-    async () => {
-      const campaign = await createCampaign();
+    it(
+      "returns null when no campaign matches",
+      async () => {
+        await createCampaign();
 
-      const payload = createTrackingPayload(
-        campaign,
-        "duplicate-user",
-        "duplicate-opportunity"
-      );
+        const ad =
+          await selectAd({
+            userId:
+              "no-match-user",
+            country: "JP",
+            device: "tablet",
+            category: "finance",
+          });
 
-      const first = await recordImpression(payload);
-      const second = await recordImpression(payload);
-
-      expect(first.ok).toBe(true);
-      expect(second.ok).toBe(true);
-
-      if (first.ok && second.ok) {
-        expect(first.deduped).toBe(false);
-        expect(second.deduped).toBe(true);
+        expect(ad).toBeNull();
       }
+    );
 
-      const eventCount = await prisma.adEvent.count({
-        where: {
-          eventId: "impression:duplicate-opportunity",
-        },
-      });
+    it(
+      "does not double-count the same impression opportunity",
+      async () => {
+        const campaign =
+          await createCampaign();
 
-      const updatedCampaign =
-        await prisma.campaign.findUniqueOrThrow({
-          where: {
-            id: campaign.id,
-          },
-        });
-
-      expect(eventCount).toBe(1);
-      expect(updatedCampaign.impressions).toBe(1);
-      expect(updatedCampaign.spentMicros).toBe(
-        dollarsToMicros(1)
-      );
-    }
-  );
-
-  it(
-    "stops serving a campaign after the frequency cap",
-    async () => {
-      const campaign = await createCampaign();
-      const userId = "frequency-user";
-
-      for (let i = 1; i <= 3; i++) {
-        const result = await recordImpression(
+        const payload =
           createTrackingPayload(
             campaign,
-            userId,
-            `frequency-${i}`
-          )
+            "duplicate-user",
+            "duplicate-opportunity"
+          );
+
+        const first =
+          await recordImpression(
+            payload
+          );
+
+        const second =
+          await recordImpression(
+            payload
+          );
+
+        expect(first.ok)
+          .toBe(true);
+
+        expect(second.ok)
+          .toBe(true);
+
+        if (
+          first.ok &&
+          second.ok
+        ) {
+          expect(first.deduped)
+            .toBe(false);
+
+          expect(second.deduped)
+            .toBe(true);
+        }
+
+        const eventCount =
+          await prisma.adEvent
+            .count({
+              where: {
+                eventId:
+                  "impression:duplicate-opportunity",
+              },
+            });
+
+        const updatedCampaign =
+          await prisma.campaign
+            .findUniqueOrThrow({
+              where: {
+                id:
+                  campaign.id,
+              },
+            });
+
+        expect(eventCount)
+          .toBe(1);
+
+        expect(
+          updatedCampaign
+            .impressions
+        ).toBe(1);
+
+        expect(
+          updatedCampaign
+            .spentMicros
+        ).toBe(
+          dollarsToMicros(1)
         );
-
-        expect(result.ok).toBe(true);
       }
+    );
 
-      const blocked = await recordImpression(
-        createTrackingPayload(
-          campaign,
-          userId,
-          "frequency-4"
-        )
-      );
+    it(
+      "stops serving a campaign after the frequency cap",
+      async () => {
+        const campaign =
+          await createCampaign();
 
-      expect(blocked).toEqual({
-        ok: false,
-        reason: "FREQUENCY_CAP_REACHED",
-      });
+        const userId =
+          "frequency-user";
 
-      const ad = await selectAd({
-        userId,
-        country: "AU",
-        device: "mobile",
-        category: "sports",
-      });
+        for (
+          let i = 1;
+          i <= 3;
+          i++
+        ) {
+          const result =
+            await recordImpression(
+              createTrackingPayload(
+                campaign,
+                userId,
+                `frequency-${i}`
+              )
+            );
 
-      expect(ad).toBeNull();
-    }
-  );
+          expect(result.ok)
+            .toBe(true);
+        }
 
-  it(
-    "never exceeds the total budget under concurrent impressions",
-    async () => {
-      const campaign = await createCampaign({
-        totalBudgetMicros: dollarsToMicros(3),
-        bidPriceMicros: dollarsToMicros(1),
-      });
-
-      const requests = Array.from(
-        { length: 10 },
-        (_, index) =>
-          recordImpression(
+        const blocked =
+          await recordImpression(
             createTrackingPayload(
               campaign,
-              `concurrent-user-${index}`,
-              `concurrent-${index}`
+              userId,
+              "frequency-4"
             )
-          )
-      );
+          );
 
-      await Promise.allSettled(requests);
+        expect(blocked)
+          .toEqual({
+            ok: false,
+            reason:
+              "FREQUENCY_CAP_REACHED",
+          });
 
-      const updatedCampaign =
-        await prisma.campaign.findUniqueOrThrow({
-          where: {
-            id: campaign.id,
-          },
-        });
+        const ad =
+          await selectAd({
+            userId,
+            country: "AU",
+            device: "mobile",
+            category: "sports",
+          });
 
-      expect(
-        updatedCampaign.spentMicros
-      ).toBeLessThanOrEqual(
-        updatedCampaign.totalBudgetMicros
-      );
-
-      expect(
-        updatedCampaign.impressions
-      ).toBeLessThanOrEqual(3);
-    }
-  );
-
-  it(
-    "matches an unrestricted category campaign when the request has a category",
-    async () => {
-      const campaign = await createCampaign({
-        categories: [],
-      });
-
-      const ad = await selectAd({
-        userId: "category-user-1",
-        country: "AU",
-        device: "mobile",
-        category: "sports",
-      });
-
-      expect(ad?.id).toBe(campaign.id);
-    }
-  );
-
-  it(
-    "does not match a category-targeted campaign when the request has no category",
-    async () => {
-      await createCampaign({
-        categories: ["sports"],
-      });
-
-      const ad = await selectAd({
-        userId: "category-user-2",
-        country: "AU",
-        device: "mobile",
-      });
-
-      expect(ad).toBeNull();
-    }
-  );
-
-  it(
-    "matches an unrestricted campaign when the request has no category",
-    async () => {
-      const campaign = await createCampaign({
-        categories: [],
-      });
-
-      const ad = await selectAd({
-        userId: "category-user-3",
-        country: "AU",
-        device: "mobile",
-      });
-
-      expect(ad?.id).toBe(campaign.id);
-    }
-  );
-
-  it(
-    "charges CPI on impression but not click",
-    async () => {
-      const campaign = await createCampaign({
-        bidType: "CPI",
-        bidPriceMicros: dollarsToMicros(0.8),
-      });
-
-      const payload = createTrackingPayload(
-        campaign,
-        "cpi-user",
-        "cpi-opportunity"
-      );
-
-      await recordImpression(payload);
-
-      const afterImpression =
-        await prisma.campaign.findUniqueOrThrow({
-          where: {
-            id: campaign.id,
-          },
-        });
-
-      expect(afterImpression.spentMicros).toBe(
-        dollarsToMicros(0.8)
-      );
-
-      await recordClick(payload);
-
-      const afterClick =
-        await prisma.campaign.findUniqueOrThrow({
-          where: {
-            id: campaign.id,
-          },
-        });
-
-      expect(afterClick.spentMicros).toBe(
-        dollarsToMicros(0.8)
-      );
-    }
-  );
-
-  it(
-    "charges CPC on click but not impression",
-    async () => {
-      const campaign = await createCampaign({
-        bidType: "CPC",
-        bidPriceMicros: dollarsToMicros(0.6),
-      });
-
-      const payload = createTrackingPayload(
-        campaign,
-        "cpc-user",
-        "cpc-opportunity"
-      );
-
-      await recordImpression(payload);
-
-      const afterImpression =
-        await prisma.campaign.findUniqueOrThrow({
-          where: {
-            id: campaign.id,
-          },
-        });
-
-      expect(afterImpression.spentMicros).toBe(0n);
-
-      const firstClick =
-        await recordClick(payload);
-
-      const secondClick =
-        await recordClick(payload);
-
-      expect(firstClick.ok).toBe(true);
-      expect(secondClick.ok).toBe(true);
-
-      if (
-        firstClick.ok &&
-        secondClick.ok
-      ) {
-        expect(
-          secondClick.deduped
-        ).toBe(true);
+        expect(ad).toBeNull();
       }
+    );
 
-      const afterClick =
-        await prisma.campaign.findUniqueOrThrow({
-          where: {
-            id: campaign.id,
-          },
-        });
+    it(
+      "enforces the frequency cap under concurrent impressions",
+      async () => {
+        const campaign =
+          await createCampaign({
+            totalBudgetMicros:
+              dollarsToMicros(100),
+            dailyBudgetMicros:
+              dollarsToMicros(100),
+          });
 
-      expect(afterClick.spentMicros).toBe(
-        dollarsToMicros(0.6)
-      );
+        const requests =
+          Array.from(
+            { length: 20 },
+            (_, index) =>
+              recordImpression(
+                createTrackingPayload(
+                  campaign,
+                  "same-frequency-user",
+                  `frequency-race-${index}`
+                )
+              )
+          );
 
-      expect(afterClick.clicks).toBe(1);
-    }
-  );
+        const results =
+          await Promise.all(
+            requests
+          );
 
-  it(
-    "requires a click to reference its exact impression opportunity",
-    async () => {
-      const campaign = await createCampaign({
-        bidType: "CPC",
-      });
+        const successful =
+          results.filter(
+            (result) =>
+              result.ok
+          ).length;
 
-      const impressionPayload =
-        createTrackingPayload(
-          campaign,
-          "attribution-user",
-          "opportunity-a"
-        );
+        const eventCount =
+          await prisma.adEvent
+            .count({
+              where: {
+                campaignId:
+                  campaign.id,
+                userId:
+                  "same-frequency-user",
+                eventType:
+                  "impression",
+              },
+            });
 
-      const otherPayload =
-        createTrackingPayload(
-          campaign,
-          "attribution-user",
-          "opportunity-b"
-        );
+        const updatedCampaign =
+          await prisma.campaign
+            .findUniqueOrThrow({
+              where: {
+                id:
+                  campaign.id,
+              },
+            });
 
-      await recordImpression(
-        impressionPayload
-      );
+        expect(successful)
+          .toBe(3);
 
-      const click =
-        await recordClick(
-          otherPayload
-        );
-
-      expect(click).toEqual({
-        ok: false,
-        reason: "NO_PRIOR_IMPRESSION",
-      });
-    }
-  );
-
-  it(
-    "issues and verifies a token that binds campaign user and bid terms",
-    async () => {
-      const token = issueAdToken({
-        campaignId: 123,
-        userId: "token-user",
-        bidType: "CPC",
-        bidPriceMicros: dollarsToMicros(0.75),
-      });
-
-      const result = verifyAdToken(token);
-
-      expect(result.ok).toBe(true);
-
-      if (result.ok) {
-        expect(
-          result.payload.campaignId
-        ).toBe(123);
+        expect(eventCount)
+          .toBe(3);
 
         expect(
-          result.payload.userId
-        ).toBe("token-user");
+          updatedCampaign
+            .impressions
+        ).toBe(3);
+      }
+    );
+
+    it(
+      "never exceeds the total budget under 50 concurrent impressions",
+      async () => {
+        const campaign =
+          await createCampaign({
+            totalBudgetMicros:
+              dollarsToMicros(3),
+            dailyBudgetMicros:
+              dollarsToMicros(100),
+            bidPriceMicros:
+              dollarsToMicros(1),
+          });
+
+        const requests =
+          Array.from(
+            { length: 50 },
+            (_, index) =>
+              recordImpression(
+                createTrackingPayload(
+                  campaign,
+                  `budget-user-${index}`,
+                  `budget-race-${index}`
+                )
+              )
+          );
+
+        const results =
+          await Promise.all(
+            requests
+          );
+
+        const successful =
+          results.filter(
+            (result) =>
+              result.ok
+          ).length;
+
+        const updatedCampaign =
+          await prisma.campaign
+            .findUniqueOrThrow({
+              where: {
+                id:
+                  campaign.id,
+              },
+            });
+
+        expect(successful)
+          .toBe(3);
 
         expect(
-          result.payload.bidType
-        ).toBe("CPC");
-
-        expect(
-          result.payload.bidPriceMicros
+          updatedCampaign.spentMicros
         ).toBe(
-          dollarsToMicros(
-            0.75
-          ).toString()
+          dollarsToMicros(3)
+        );
+
+        expect(
+          updatedCampaign.impressions
+        ).toBe(3);
+      }
+    );
+
+    it(
+      "never exceeds the daily budget under concurrent impressions",
+      async () => {
+        const campaign =
+          await createCampaign({
+            totalBudgetMicros:
+              dollarsToMicros(100),
+            dailyBudgetMicros:
+              dollarsToMicros(3),
+            bidPriceMicros:
+              dollarsToMicros(1),
+          });
+
+        const requests =
+          Array.from(
+            { length: 20 },
+            (_, index) =>
+              recordImpression(
+                createTrackingPayload(
+                  campaign,
+                  `daily-user-${index}`,
+                  `daily-race-${index}`
+                )
+              )
+          );
+
+        const results =
+          await Promise.all(
+            requests
+          );
+
+        const successful =
+          results.filter(
+            (result) =>
+              result.ok
+          ).length;
+
+        const updatedCampaign =
+          await prisma.campaign
+            .findUniqueOrThrow({
+              where: {
+                id:
+                  campaign.id,
+              },
+            });
+
+        expect(successful)
+          .toBe(3);
+
+        expect(
+          updatedCampaign.spentMicros
+        ).toBe(
+          dollarsToMicros(3)
         );
       }
-    }
-  );
+    );
 
-  it(
-    "rejects a tampered signed token",
-    async () => {
-      const token = issueAdToken({
-        campaignId: 1,
-        userId: "token-user",
-        bidType: "CPI",
-        bidPriceMicros: dollarsToMicros(1),
-      });
+    it(
+      "matches an unrestricted category campaign when the request has a category",
+      async () => {
+        const campaign =
+          await createCampaign({
+            categories: [],
+          });
 
-      const [payload, signature] =
-        token.split(".");
+        const ad =
+          await selectAd({
+            userId:
+              "category-user-1",
+            country: "AU",
+            device: "mobile",
+            category: "sports",
+          });
 
-      const tamperedToken =
-        `${payload}x.${signature}`;
+        expect(ad?.id)
+          .toBe(campaign.id);
+      }
+    );
 
-      expect(
-        verifyAdToken(tamperedToken)
-      ).toEqual({
-        ok: false,
-        reason: "INVALID_AD_TOKEN",
-      });
-    }
-  );
+    it(
+      "does not match a category-targeted campaign when the request has no category",
+      async () => {
+        await createCampaign({
+          categories: [
+            "sports",
+          ],
+        });
 
-  it(
-    "rejects an expired signed token",
-    async () => {
-      const token = issueAdToken(
-        {
-          campaignId: 1,
-          userId: "token-user",
-          bidType: "CPI",
-          bidPriceMicros: dollarsToMicros(1),
-        },
-        -1
-      );
+        const ad =
+          await selectAd({
+            userId:
+              "category-user-2",
+            country: "AU",
+            device: "mobile",
+          });
 
-      expect(
-        verifyAdToken(token)
-      ).toEqual({
-        ok: false,
-        reason: "EXPIRED_AD_TOKEN",
-      });
-    }
-  );
+        expect(ad).toBeNull();
+      }
+    );
 
-  it(
-    "matches campaigns across multiple countries devices and categories",
-    async () => {
-      const campaign = await createCampaign({
-        countries: ["AU", "NZ"],
-        devices: ["mobile", "tablet"],
-        categories: ["sports", "fitness"],
-      });
+    it(
+      "matches an unrestricted campaign when the request has no category",
+      async () => {
+        const campaign =
+          await createCampaign({
+            categories: [],
+          });
 
-      const ad = await selectAd({
-        userId: "multi-target-user",
-        country: "NZ",
-        device: "tablet",
-        category: "fitness",
-      });
+        const ad =
+          await selectAd({
+            userId:
+              "category-user-3",
+            country: "AU",
+            device: "mobile",
+          });
 
-      expect(ad?.id).toBe(
-        campaign.id
-      );
-    }
-  );
+        expect(ad?.id)
+          .toBe(campaign.id);
+      }
+    );
 
-  it(
-    "matches empty targeting arrays as unrestricted",
-    async () => {
-      const campaign = await createCampaign({
-        countries: [],
-        devices: [],
-        categories: [],
-      });
+    it(
+      "charges CPI on impression but not click",
+      async () => {
+        const campaign =
+          await createCampaign({
+            bidType: "CPI",
+            bidPriceMicros:
+              dollarsToMicros(
+                0.8
+              ),
+          });
 
-      const ad = await selectAd({
-        userId: "unrestricted-user",
-        country: "SG",
-        device: "desktop",
-        category: "technology",
-      });
+        const payload =
+          createTrackingPayload(
+            campaign,
+            "cpi-user",
+            "cpi-opportunity"
+          );
 
-      expect(ad?.id).toBe(
-        campaign.id
-      );
-    }
-  );
-});
+        await recordImpression(
+          payload
+        );
 
+        const afterImpression =
+          await prisma.campaign
+            .findUniqueOrThrow({
+              where: {
+                id:
+                  campaign.id,
+              },
+            });
 
-  it(
-  "selects the highest eligible bid from many matching campaigns",
-  async () => {
-    for (let i = 1; i <= 20; i++) {
-      await createCampaign({
-        name: `Candidate ${i}`,
-        bidPriceMicros:
-          dollarsToMicros(i / 100),
-        countries: ["AU"],
-        devices: ["mobile"],
-        categories: ["sports"],
-      });
-    }
+        expect(
+          afterImpression.spentMicros
+        ).toBe(
+          dollarsToMicros(0.8)
+        );
 
-    const highest = await createCampaign({
-      name: "Highest Bid",
-      bidPriceMicros:
-        dollarsToMicros(1.5),
-      countries: ["AU"],
-      devices: ["mobile"],
-      categories: ["sports"],
-    });
+        await recordClick(
+          payload
+        );
 
-    const ad = await selectAd({
-      userId: "bulk-selection-user",
-      country: "AU",
-      device: "mobile",
-      category: "sports",
-    });
+        const afterClick =
+          await prisma.campaign
+            .findUniqueOrThrow({
+              where: {
+                id:
+                  campaign.id,
+              },
+            });
 
-    expect(ad?.id).toBe(highest.id);
+        expect(
+          afterClick.spentMicros
+        ).toBe(
+          dollarsToMicros(0.8)
+        );
+      }
+    );
+
+    it(
+      "charges CPC on click but not impression",
+      async () => {
+        const campaign =
+          await createCampaign({
+            bidType: "CPC",
+            bidPriceMicros:
+              dollarsToMicros(
+                0.6
+              ),
+          });
+
+        const payload =
+          createTrackingPayload(
+            campaign,
+            "cpc-user",
+            "cpc-opportunity"
+          );
+
+        await recordImpression(
+          payload
+        );
+
+        const afterImpression =
+          await prisma.campaign
+            .findUniqueOrThrow({
+              where: {
+                id:
+                  campaign.id,
+              },
+            });
+
+        expect(
+          afterImpression.spentMicros
+        ).toBe(0n);
+
+        const firstClick =
+          await recordClick(
+            payload
+          );
+
+        const secondClick =
+          await recordClick(
+            payload
+          );
+
+        expect(firstClick.ok)
+          .toBe(true);
+
+        expect(secondClick.ok)
+          .toBe(true);
+
+        if (
+          firstClick.ok &&
+          secondClick.ok
+        ) {
+          expect(
+            secondClick.deduped
+          ).toBe(true);
+        }
+
+        const afterClick =
+          await prisma.campaign
+            .findUniqueOrThrow({
+              where: {
+                id:
+                  campaign.id,
+              },
+            });
+
+        expect(
+          afterClick.spentMicros
+        ).toBe(
+          dollarsToMicros(0.6)
+        );
+
+        expect(
+          afterClick.clicks
+        ).toBe(1);
+      }
+    );
+
+    it(
+      "requires a click to reference its exact impression opportunity",
+      async () => {
+        const campaign =
+          await createCampaign({
+            bidType: "CPC",
+          });
+
+        const impressionPayload =
+          createTrackingPayload(
+            campaign,
+            "attribution-user",
+            "opportunity-a"
+          );
+
+        const otherPayload =
+          createTrackingPayload(
+            campaign,
+            "attribution-user",
+            "opportunity-b"
+          );
+
+        await recordImpression(
+          impressionPayload
+        );
+
+        const click =
+          await recordClick(
+            otherPayload
+          );
+
+        expect(click).toEqual({
+          ok: false,
+          reason:
+            "NO_PRIOR_IMPRESSION",
+        });
+      }
+    );
+
+    it(
+      "issues and verifies a token that binds campaign user and bid terms",
+      async () => {
+        const token =
+          issueAdToken({
+            campaignId: 123,
+            userId:
+              "token-user",
+            bidType: "CPC",
+            bidPriceMicros:
+              dollarsToMicros(
+                0.75
+              ),
+          });
+
+        const result =
+          verifyAdToken(token);
+
+        expect(result.ok)
+          .toBe(true);
+
+        if (result.ok) {
+          expect(
+            result.payload
+              .campaignId
+          ).toBe(123);
+
+          expect(
+            result.payload.userId
+          ).toBe(
+            "token-user"
+          );
+
+          expect(
+            result.payload.bidType
+          ).toBe("CPC");
+
+          expect(
+            result.payload
+              .bidPriceMicros
+          ).toBe(
+            dollarsToMicros(
+              0.75
+            ).toString()
+          );
+        }
+      }
+    );
+
+    it(
+      "rejects a tampered signed token",
+      async () => {
+        const token =
+          issueAdToken({
+            campaignId: 1,
+            userId:
+              "token-user",
+            bidType: "CPI",
+            bidPriceMicros:
+              dollarsToMicros(
+                1
+              ),
+          });
+
+        const [
+          payload,
+          signature,
+        ] =
+          token.split(".");
+
+        const tamperedToken =
+          `${payload}x.${signature}`;
+
+        expect(
+          verifyAdToken(
+            tamperedToken
+          )
+        ).toEqual({
+          ok: false,
+          reason:
+            "INVALID_AD_TOKEN",
+        });
+      }
+    );
+
+    it(
+      "rejects an expired signed token",
+      async () => {
+        const token =
+          issueAdToken(
+            {
+              campaignId: 1,
+              userId:
+                "token-user",
+              bidType: "CPI",
+              bidPriceMicros:
+                dollarsToMicros(
+                  1
+                ),
+            },
+            -1
+          );
+
+        expect(
+          verifyAdToken(token)
+        ).toEqual({
+          ok: false,
+          reason:
+            "EXPIRED_AD_TOKEN",
+        });
+      }
+    );
+
+    it(
+      "matches campaigns across multiple countries devices and categories",
+      async () => {
+        const campaign =
+          await createCampaign({
+            countries: [
+              "AU",
+              "NZ",
+            ],
+            devices: [
+              "mobile",
+              "tablet",
+            ],
+            categories: [
+              "sports",
+              "fitness",
+            ],
+          });
+
+        const ad =
+          await selectAd({
+            userId:
+              "multi-target-user",
+            country: "NZ",
+            device: "tablet",
+            category: "fitness",
+          });
+
+        expect(ad?.id)
+          .toBe(campaign.id);
+      }
+    );
+
+    it(
+      "matches empty targeting arrays as unrestricted",
+      async () => {
+        const campaign =
+          await createCampaign({
+            countries: [],
+            devices: [],
+            categories: [],
+          });
+
+        const ad =
+          await selectAd({
+            userId:
+              "unrestricted-user",
+            country: "SG",
+            device: "desktop",
+            category:
+              "technology",
+          });
+
+        expect(ad?.id)
+          .toBe(campaign.id);
+      }
+    );
+
+    it(
+      "selects the highest eligible bid from many matching campaigns",
+      async () => {
+        for (
+          let i = 1;
+          i <= 20;
+          i++
+        ) {
+          await createCampaign({
+            name:
+              `Candidate ${i}`,
+            bidPriceMicros:
+              dollarsToMicros(
+                i / 100
+              ),
+          });
+        }
+
+        const highest =
+          await createCampaign({
+            name: "Highest Bid",
+            bidPriceMicros:
+              dollarsToMicros(
+                1.5
+              ),
+          });
+
+        const ad =
+          await selectAd({
+            userId:
+              "bulk-selection-user",
+            country: "AU",
+            device: "mobile",
+            category: "sports",
+          });
+
+        expect(ad?.id)
+          .toBe(highest.id);
+      }
+    );
   }
 );
