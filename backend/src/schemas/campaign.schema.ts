@@ -2,6 +2,10 @@ import { z } from "zod";
 
 const bidTypeSchema = z.enum(["CPI", "CPC"]);
 
+const targetingListSchema = z
+  .array(z.string().trim().min(1))
+  .max(20);
+
 export const campaignCreateSchema = z
   .object({
     name: z.string().min(1),
@@ -14,9 +18,9 @@ export const campaignCreateSchema = z
     bidPrice: z.number().positive(),
     bidType: bidTypeSchema.default("CPI"),
 
-    country: z.string().min(1),
-    device: z.string().min(1),
-    category: z.string().nullable().optional(),
+    countries: targetingListSchema.default([]),
+    devices: targetingListSchema.default([]),
+    categories: targetingListSchema.default([]),
   })
   .superRefine((data, ctx) => {
     if (data.dailyBudget > data.totalBudget) {
@@ -48,9 +52,9 @@ export const campaignUpdateSchema = z
     bidPrice: z.number().positive().optional(),
     bidType: bidTypeSchema.optional(),
 
-    country: z.string().min(1).optional(),
-    device: z.string().min(1).optional(),
-    category: z.string().nullable().optional(),
+    countries: targetingListSchema.optional(),
+    devices: targetingListSchema.optional(),
+    categories: targetingListSchema.optional(),
 
     isActive: z.boolean().optional(),
   })

@@ -17,10 +17,21 @@ const emptyForm: CampaignInput = {
   dailyBudget: 20,
   bidPrice: 0.5,
   bidType: "CPI",
-  country: "AU",
-  device: "mobile",
-  category: "",
+  countries: [],
+  devices: [],
+  categories: [],
 };
+
+function parseList(value: string): string[] {
+  return [
+    ...new Set(
+      value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean)
+    ),
+  ];
+}
 
 export default function CampaignForm({
   campaign,
@@ -28,6 +39,9 @@ export default function CampaignForm({
   onCancel,
 }: CampaignFormProps) {
   const [formData, setFormData] = useState<CampaignInput>(emptyForm);
+  const [countriesText, setCountriesText] = useState("");
+  const [devicesText, setDevicesText] = useState("");
+  const [categoriesText, setCategoriesText] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -42,12 +56,19 @@ export default function CampaignForm({
         dailyBudget: campaign.dailyBudget,
         bidPrice: campaign.bidPrice,
         bidType: campaign.bidType,
-        country: campaign.country,
-        device: campaign.device,
-        category: campaign.category ?? "",
+        countries: campaign.countries,
+        devices: campaign.devices,
+        categories: campaign.categories,
       });
+
+      setCountriesText(campaign.countries.join(", "));
+      setDevicesText(campaign.devices.join(", "));
+      setCategoriesText(campaign.categories.join(", "));
     } else {
       setFormData(emptyForm);
+      setCountriesText("");
+      setDevicesText("");
+      setCategoriesText("");
     }
 
     setError("");
@@ -74,9 +95,9 @@ export default function CampaignForm({
 
       const data: CampaignInput = {
         ...formData,
-        category: formData.category?.trim()
-          ? formData.category.trim()
-          : null,
+        countries: parseList(countriesText),
+        devices: parseList(devicesText),
+        categories: parseList(categoriesText),
       };
 
       if (campaign) {
@@ -215,36 +236,34 @@ export default function CampaignForm({
         </label>
 
         <label>
-          Country
+          Countries
           <input
-            required
-            value={formData.country}
+            placeholder="AU, NZ — blank = all"
+            value={countriesText}
             onChange={(event) =>
-              updateField("country", event.target.value)
+              setCountriesText(event.target.value)
             }
           />
         </label>
 
         <label>
-          Device
-          <select
-            value={formData.device}
+          Devices
+          <input
+            placeholder="mobile, tablet — blank = all"
+            value={devicesText}
             onChange={(event) =>
-              updateField("device", event.target.value)
+              setDevicesText(event.target.value)
             }
-          >
-            <option value="mobile">mobile</option>
-            <option value="desktop">desktop</option>
-            <option value="tablet">tablet</option>
-          </select>
+          />
         </label>
 
         <label>
-          Category
+          Categories
           <input
-            value={formData.category ?? ""}
+            placeholder="sports, fitness — blank = all"
+            value={categoriesText}
             onChange={(event) =>
-              updateField("category", event.target.value)
+              setCategoriesText(event.target.value)
             }
           />
         </label>

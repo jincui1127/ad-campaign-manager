@@ -40,9 +40,7 @@ export async function getDailySpend(
       campaignId,
       createdAt: { gte: dayStart },
     },
-    _sum: {
-      costMicros: true,
-    },
+    _sum: { costMicros: true },
   });
 
   return result._sum.costMicros ?? 0n;
@@ -58,18 +56,32 @@ export async function selectAd(request: {
     request.category !== undefined
       ? {
           OR: [
-            { category: null },
-            { category: request.category },
+            { categories: { isEmpty: true } },
+            { categories: { has: request.category } },
           ],
         }
-      : { category: null };
+      : {
+          categories: { isEmpty: true },
+        };
 
   const candidates = await prisma.campaign.findMany({
     where: {
       isActive: true,
-      country: request.country,
-      device: request.device,
-      ...categoryFilter,
+      AND: [
+        {
+          OR: [
+            { countries: { isEmpty: true } },
+            { countries: { has: request.country } },
+          ],
+        },
+        {
+          OR: [
+            { devices: { isEmpty: true } },
+            { devices: { has: request.device } },
+          ],
+        },
+        categoryFilter,
+      ],
     },
     orderBy: [
       { bidPriceMicros: "desc" },

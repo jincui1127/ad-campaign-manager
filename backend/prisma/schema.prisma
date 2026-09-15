@@ -18,7 +18,7 @@ enum BidType {
 }
 
 model Campaign {
-  id             Int      @id @default(autoincrement())
+  id             Int @id @default(autoincrement())
 
   name           String
   headline       String
@@ -30,37 +30,38 @@ model Campaign {
   bidPriceMicros    BigInt
   bidType           BidType @default(CPI)
 
-  country        String
-  device         String
-  category       String?
+  countries  String[] @default([])
+  devices    String[] @default([])
+  categories String[] @default([])
 
-  isActive       Boolean @default(true)
+  isActive    Boolean @default(true)
 
-  spentMicros    BigInt @default(0)
-  impressions    Int    @default(0)
-  clicks         Int    @default(0)
+  spentMicros BigInt @default(0)
+  impressions Int    @default(0)
+  clicks      Int    @default(0)
 
-  createdAt      DateTime @default(now())
+  createdAt DateTime @default(now())
 
-  events         AdEvent[]
+  events AdEvent[]
 
-  @@index([country])
-  @@index([device])
+  @@index([countries], type: Gin)
+  @@index([devices], type: Gin)
+  @@index([categories], type: Gin)
   @@index([isActive])
 }
 
 model AdEvent {
-  id         Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
-  eventId    String   @unique
+  eventId String @unique
 
   campaignId Int
   userId     String
   eventType  String
 
-  costMicros BigInt   @default(0)
+  costMicros BigInt @default(0)
 
-  createdAt  DateTime @default(now())
+  createdAt DateTime @default(now())
 
   campaign Campaign @relation(fields: [campaignId], references: [id])
 

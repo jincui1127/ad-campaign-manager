@@ -1,40 +1,25 @@
 import { useEffect, useState } from "react";
-
-import {
-  getCampaigns,
-  updateCampaign,
-} from "../api/client";
-
+import { getCampaigns, updateCampaign } from "../api/client";
 import type { Campaign } from "../types";
-
 import CampaignForm from "./CampaignForm";
 
+function displayTarget(values: string[], fallback: string) {
+  return values.length > 0 ? values.join(", ") : fallback;
+}
 
 export default function CampaignDashboard() {
-  const [campaigns, setCampaigns] =
-    useState<Campaign[]>([]);
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [error, setError] =
-    useState("");
-
-  const [showForm, setShowForm] =
-    useState(false);
-
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [showForm, setShowForm] = useState(false);
   const [editingCampaign, setEditingCampaign] =
     useState<Campaign | null>(null);
-
 
   async function loadCampaigns() {
     try {
       setLoading(true);
       setError("");
-
-      const data = await getCampaigns();
-
-      setCampaigns(data);
+      setCampaigns(await getCampaigns());
     } catch (err) {
       setError(
         err instanceof Error
@@ -46,28 +31,23 @@ export default function CampaignDashboard() {
     }
   }
 
-
   useEffect(() => {
     loadCampaigns();
   }, []);
 
-
-  async function toggleCampaignStatus(
-    campaign: Campaign
-  ) {
+  async function toggleCampaignStatus(campaign: Campaign) {
     try {
       setError("");
 
-      const updatedCampaign =
-        await updateCampaign(
-          campaign.id,
-          {
-            isActive: !campaign.isActive,
-          }
-        );
+      const updatedCampaign = await updateCampaign(
+        campaign.id,
+        {
+          isActive: !campaign.isActive,
+        }
+      );
 
-      setCampaigns((currentCampaigns) =>
-        currentCampaigns.map((item) =>
+      setCampaigns((current) =>
+        current.map((item) =>
           item.id === updatedCampaign.id
             ? updatedCampaign
             : item
@@ -82,74 +62,52 @@ export default function CampaignDashboard() {
     }
   }
 
-
   function openCreateForm() {
     setEditingCampaign(null);
     setShowForm(true);
   }
 
-
-  function openEditForm(
-    campaign: Campaign
-  ) {
+  function openEditForm(campaign: Campaign) {
     setEditingCampaign(campaign);
     setShowForm(true);
   }
-
 
   function closeForm() {
     setShowForm(false);
     setEditingCampaign(null);
   }
 
-
   async function handleCampaignSaved() {
     closeForm();
     await loadCampaigns();
   }
 
-
   if (loading) {
     return <p>Loading campaigns...</p>;
   }
-
 
   return (
     <section className="dashboard">
       <div className="dashboard-header">
         <div>
           <h2>Campaign Dashboard</h2>
-
           <p>
-            Monitor campaign delivery,
-            budgets and performance.
+            Monitor campaign delivery, budgets and performance.
           </p>
         </div>
 
         <div className="dashboard-actions">
-          <button
-            type="button"
-            onClick={openCreateForm}
-          >
+          <button type="button" onClick={openCreateForm}>
             + Create Campaign
           </button>
 
-          <button
-            type="button"
-            onClick={loadCampaigns}
-          >
+          <button type="button" onClick={loadCampaigns}>
             Refresh
           </button>
         </div>
       </div>
 
-
-      {error && (
-        <p className="error-message">
-          {error}
-        </p>
-      )}
-
+      {error && <p className="error-message">{error}</p>}
 
       {showForm && (
         <CampaignForm
@@ -158,7 +116,6 @@ export default function CampaignDashboard() {
           onCancel={closeForm}
         />
       )}
-
 
       <div className="table-wrapper">
         <table className="campaign-table">
@@ -180,10 +137,7 @@ export default function CampaignDashboard() {
             {campaigns.map((campaign) => (
               <tr key={campaign.id}>
                 <td>
-                  <strong>
-                    {campaign.name}
-                  </strong>
-
+                  <strong>{campaign.name}</strong>
                   <div className="secondary-text">
                     {campaign.headline}
                   </div>
@@ -197,27 +151,39 @@ export default function CampaignDashboard() {
                         : "status paused"
                     }
                   >
-                    {campaign.isActive
-                      ? "Active"
-                      : "Paused"}
+                    {campaign.isActive ? "Active" : "Paused"}
                   </span>
                 </td>
 
                 <td>
-                  {campaign.country}
-                  {" / "}
-                  {campaign.device}
+                  <div>
+                    Countries:{" "}
+                    {displayTarget(
+                      campaign.countries,
+                      "All"
+                    )}
+                  </div>
 
-                  {campaign.category && (
-                    <>
-                      {" / "}
-                      {campaign.category}
-                    </>
-                  )}
+                  <div>
+                    Devices:{" "}
+                    {displayTarget(
+                      campaign.devices,
+                      "All"
+                    )}
+                  </div>
+
+                  <div>
+                    Categories:{" "}
+                    {displayTarget(
+                      campaign.categories,
+                      "All"
+                    )}
+                  </div>
                 </td>
 
                 <td>
-                  ${campaign.bidPrice.toFixed(2)}
+                  ${campaign.bidPrice.toFixed(2)}{" "}
+                  {campaign.bidType}
                 </td>
 
                 <td>
@@ -236,13 +202,8 @@ export default function CampaignDashboard() {
                   ${campaign.spent.toFixed(2)}
                 </td>
 
-                <td>
-                  {campaign.impressions}
-                </td>
-
-                <td>
-                  {campaign.clicks}
-                </td>
+                <td>{campaign.impressions}</td>
+                <td>{campaign.clicks}</td>
 
                 <td>
                   <div className="row-actions">
@@ -258,9 +219,7 @@ export default function CampaignDashboard() {
                     <button
                       type="button"
                       onClick={() =>
-                        toggleCampaignStatus(
-                          campaign
-                        )
+                        toggleCampaignStatus(campaign)
                       }
                     >
                       {campaign.isActive

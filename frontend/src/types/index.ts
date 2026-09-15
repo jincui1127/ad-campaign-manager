@@ -10,9 +10,9 @@ export interface Campaign {
   dailyBudget: number;
   bidPrice: number;
   bidType: BidType;
-  country: string;
-  device: string;
-  category: string | null;
+  countries: string[];
+  devices: string[];
+  categories: string[];
   isActive: boolean;
   spent: number;
   impressions: number;
@@ -29,9 +29,9 @@ export interface CampaignInput {
   dailyBudget: number;
   bidPrice: number;
   bidType: BidType;
-  country: string;
-  device: string;
-  category?: string | null;
+  countries: string[];
+  devices: string[];
+  categories: string[];
 }
 
 export interface AdRequest {

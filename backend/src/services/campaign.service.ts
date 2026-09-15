@@ -17,9 +17,9 @@ export function toCampaignResponse(campaign: Campaign) {
     dailyBudget: microsToDollars(campaign.dailyBudgetMicros),
     bidPrice: microsToDollars(campaign.bidPriceMicros),
     bidType: campaign.bidType,
-    country: campaign.country,
-    device: campaign.device,
-    category: campaign.category,
+    countries: campaign.countries,
+    devices: campaign.devices,
+    categories: campaign.categories,
     isActive: campaign.isActive,
     spent: microsToDollars(campaign.spentMicros),
     impressions: campaign.impressions,
@@ -38,11 +38,9 @@ export async function createCampaign(data: CampaignCreateInput) {
     dailyBudgetMicros: dollarsToMicros(data.dailyBudget),
     bidPriceMicros: dollarsToMicros(data.bidPrice),
     bidType: data.bidType,
-    country: data.country,
-    device: data.device,
-    ...(data.category !== undefined
-      ? { category: data.category }
-      : {}),
+    countries: data.countries,
+    devices: data.devices,
+    categories: data.categories,
   };
 
   const campaign = await prisma.campaign.create({
@@ -77,6 +75,7 @@ export async function updateCampaign(
   if (data.name !== undefined) updateData.name = data.name;
   if (data.headline !== undefined) updateData.headline = data.headline;
   if (data.imageUrl !== undefined) updateData.imageUrl = data.imageUrl;
+
   if (data.landingPageUrl !== undefined) {
     updateData.landingPageUrl = data.landingPageUrl;
   }
@@ -94,9 +93,9 @@ export async function updateCampaign(
   }
 
   if (data.bidType !== undefined) updateData.bidType = data.bidType;
-  if (data.country !== undefined) updateData.country = data.country;
-  if (data.device !== undefined) updateData.device = data.device;
-  if (data.category !== undefined) updateData.category = data.category;
+  if (data.countries !== undefined) updateData.countries = data.countries;
+  if (data.devices !== undefined) updateData.devices = data.devices;
+  if (data.categories !== undefined) updateData.categories = data.categories;
   if (data.isActive !== undefined) updateData.isActive = data.isActive;
 
   const campaign = await prisma.campaign.update({
