@@ -1,15 +1,10 @@
 import { prisma } from "../lib/prisma.js";
 import { Prisma } from "../generated/prisma/client.js";
 import type { AdEvent } from "../generated/prisma/client.js";
+import type { AdTokenPayload } from "./ad-token.service.js";
 import { AD_CONFIG } from "../config/ad.config.js";
 
 const MAX_TRANSACTION_RETRIES = 3;
-
-type AdEventInput = {
-  eventId: string;
-  campaignId: number;
-  userId: string;
-};
 
 export type TrackingFailureReason =
   | "CAMPAIGN_NOT_FOUND"
@@ -46,15 +41,31 @@ function getDayStart(): Date {
   );
 }
 
-async function findDuplicateEvent(eventId: string) {
+function impressionEventId(jti: string): string {
+  return `impression:${jti}`;
+}
+
+function clickEventId(jti: string): string {
+  return `click:${jti}`;
+}
+
+async function findDuplicateEvent(
+  eventId: string
+) {
   return prisma.adEvent.findUnique({
     where: { eventId },
   });
 }
 
 export async function recordImpression(
-  event: AdEventInput
+  token: AdTokenPayload
 ): Promise<TrackingResult> {
+  const eventId = impressionEventId(token.jti);
+  const chargeMicros =
+    token.bidType === "CPI"
+      ? BigInt(token.bidPriceMicros)
+      : 0n;
+
   for (
     let attempt = 1;
     attempt <= MAX_TRANSACTION_RETRIES;
@@ -63,9 +74,10 @@ export async function recordImpression(
     try {
       return await prisma.$transaction(
         async (tx) => {
-          const existingEvent = await tx.adEvent.findUnique({
-            where: { eventId: event.eventId },
-          });
+          const existingEvent =
+            await tx.adEvent.findUnique({
+              where: { eventId },
+            });
 
           if (existingEvent) {
             return {
@@ -75,9 +87,12 @@ export async function recordImpression(
             };
           }
 
-          const campaign = await tx.campaign.findUnique({
-            where: { id: event.campaignId },
-          });
+          const campaign =
+            await tx.campaign.findUnique({
+              where: {
+                id: token.campaignId,
+              },
+            });
 
           if (!campaign) {
             return {
@@ -95,53 +110,64 @@ export async function recordImpression(
 
           const windowStart = new Date(
             Date.now() -
-              AD_CONFIG.frequencyWindowHours * 60 * 60 * 1000
+              AD_CONFIG.frequencyWindowHours *
+                60 *
+                60 *
+                1000
           );
 
-          const impressionCount = await tx.adEvent.count({
-            where: {
-              campaignId: event.campaignId,
-              userId: event.userId,
-              eventType: "impression",
-              createdAt: { gte: windowStart },
-            },
-          });
+          const impressionCount =
+            await tx.adEvent.count({
+              where: {
+                campaignId: token.campaignId,
+                userId: token.userId,
+                eventType: "impression",
+                createdAt: {
+                  gte: windowStart,
+                },
+              },
+            });
 
-          if (impressionCount >= AD_CONFIG.frequencyCap) {
+          if (
+            impressionCount >=
+            AD_CONFIG.frequencyCap
+          ) {
             return {
               ok: false,
               reason: "FREQUENCY_CAP_REACHED",
             };
           }
 
-          const chargeMicros =
-            campaign.bidType === "CPI"
-              ? campaign.bidPriceMicros
-              : 0n;
-
           if (chargeMicros > 0n) {
             if (
-              campaign.spentMicros + chargeMicros >
+              campaign.spentMicros +
+                chargeMicros >
               campaign.totalBudgetMicros
             ) {
               return {
                 ok: false,
-                reason: "TOTAL_BUDGET_EXHAUSTED",
+                reason:
+                  "TOTAL_BUDGET_EXHAUSTED",
               };
             }
 
-            const dailySpendResult = await tx.adEvent.aggregate({
-              where: {
-                campaignId: event.campaignId,
-                createdAt: { gte: getDayStart() },
-              },
-              _sum: {
-                costMicros: true,
-              },
-            });
+            const dailySpendResult =
+              await tx.adEvent.aggregate({
+                where: {
+                  campaignId:
+                    token.campaignId,
+                  createdAt: {
+                    gte: getDayStart(),
+                  },
+                },
+                _sum: {
+                  costMicros: true,
+                },
+              });
 
             const dailySpend =
-              dailySpendResult._sum.costMicros ?? 0n;
+              dailySpendResult._sum
+                .costMicros ?? 0n;
 
             if (
               dailySpend + chargeMicros >
@@ -149,29 +175,37 @@ export async function recordImpression(
             ) {
               return {
                 ok: false,
-                reason: "DAILY_BUDGET_EXHAUSTED",
+                reason:
+                  "DAILY_BUDGET_EXHAUSTED",
               };
             }
           }
 
-          const newEvent = await tx.adEvent.create({
-            data: {
-              eventId: event.eventId,
-              campaignId: event.campaignId,
-              userId: event.userId,
-              eventType: "impression",
-              costMicros: chargeMicros,
-            },
-          });
+          const newEvent =
+            await tx.adEvent.create({
+              data: {
+                eventId,
+                campaignId:
+                  token.campaignId,
+                userId: token.userId,
+                eventType: "impression",
+                costMicros: chargeMicros,
+              },
+            });
 
           await tx.campaign.update({
-            where: { id: event.campaignId },
+            where: {
+              id: token.campaignId,
+            },
             data: {
-              impressions: { increment: 1 },
+              impressions: {
+                increment: 1,
+              },
               ...(chargeMicros > 0n
                 ? {
                     spentMicros: {
-                      increment: chargeMicros,
+                      increment:
+                        chargeMicros,
                     },
                   }
                 : {}),
@@ -186,17 +220,20 @@ export async function recordImpression(
         },
         {
           isolationLevel:
-            Prisma.TransactionIsolationLevel.Serializable,
+            Prisma.TransactionIsolationLevel
+              .Serializable,
         }
       );
     } catch (error) {
       if (
-        error instanceof Prisma.PrismaClientKnownRequestError
+        error instanceof
+        Prisma.PrismaClientKnownRequestError
       ) {
         if (error.code === "P2002") {
-          const existingEvent = await findDuplicateEvent(
-            event.eventId
-          );
+          const existingEvent =
+            await findDuplicateEvent(
+              eventId
+            );
 
           if (existingEvent) {
             return {
@@ -209,7 +246,8 @@ export async function recordImpression(
 
         if (
           error.code === "P2034" &&
-          attempt < MAX_TRANSACTION_RETRIES
+          attempt <
+            MAX_TRANSACTION_RETRIES
         ) {
           continue;
         }
@@ -225,8 +263,17 @@ export async function recordImpression(
 }
 
 export async function recordClick(
-  event: AdEventInput
+  token: AdTokenPayload
 ): Promise<TrackingResult> {
+  const eventId = clickEventId(token.jti);
+  const requiredImpressionId =
+    impressionEventId(token.jti);
+
+  const chargeMicros =
+    token.bidType === "CPC"
+      ? BigInt(token.bidPriceMicros)
+      : 0n;
+
   for (
     let attempt = 1;
     attempt <= MAX_TRANSACTION_RETRIES;
@@ -235,9 +282,10 @@ export async function recordClick(
     try {
       return await prisma.$transaction(
         async (tx) => {
-          const existingEvent = await tx.adEvent.findUnique({
-            where: { eventId: event.eventId },
-          });
+          const existingEvent =
+            await tx.adEvent.findUnique({
+              where: { eventId },
+            });
 
           if (existingEvent) {
             return {
@@ -247,9 +295,12 @@ export async function recordClick(
             };
           }
 
-          const campaign = await tx.campaign.findUnique({
-            where: { id: event.campaignId },
-          });
+          const campaign =
+            await tx.campaign.findUnique({
+              where: {
+                id: token.campaignId,
+              },
+            });
 
           if (!campaign) {
             return {
@@ -258,50 +309,60 @@ export async function recordClick(
             };
           }
 
-          const impression = await tx.adEvent.findFirst({
-            where: {
-              campaignId: event.campaignId,
-              userId: event.userId,
-              eventType: "impression",
-            },
-            orderBy: { createdAt: "desc" },
-          });
+          const impression =
+            await tx.adEvent.findUnique({
+              where: {
+                eventId:
+                  requiredImpressionId,
+              },
+            });
 
-          if (!impression) {
+          if (
+            !impression ||
+            impression.campaignId !==
+              token.campaignId ||
+            impression.userId !==
+              token.userId ||
+            impression.eventType !==
+              "impression"
+          ) {
             return {
               ok: false,
-              reason: "NO_PRIOR_IMPRESSION",
+              reason:
+                "NO_PRIOR_IMPRESSION",
             };
           }
 
-          const chargeMicros =
-            campaign.bidType === "CPC"
-              ? campaign.bidPriceMicros
-              : 0n;
-
           if (chargeMicros > 0n) {
             if (
-              campaign.spentMicros + chargeMicros >
+              campaign.spentMicros +
+                chargeMicros >
               campaign.totalBudgetMicros
             ) {
               return {
                 ok: false,
-                reason: "TOTAL_BUDGET_EXHAUSTED",
+                reason:
+                  "TOTAL_BUDGET_EXHAUSTED",
               };
             }
 
-            const dailySpendResult = await tx.adEvent.aggregate({
-              where: {
-                campaignId: event.campaignId,
-                createdAt: { gte: getDayStart() },
-              },
-              _sum: {
-                costMicros: true,
-              },
-            });
+            const dailySpendResult =
+              await tx.adEvent.aggregate({
+                where: {
+                  campaignId:
+                    token.campaignId,
+                  createdAt: {
+                    gte: getDayStart(),
+                  },
+                },
+                _sum: {
+                  costMicros: true,
+                },
+              });
 
             const dailySpend =
-              dailySpendResult._sum.costMicros ?? 0n;
+              dailySpendResult._sum
+                .costMicros ?? 0n;
 
             if (
               dailySpend + chargeMicros >
@@ -309,29 +370,37 @@ export async function recordClick(
             ) {
               return {
                 ok: false,
-                reason: "DAILY_BUDGET_EXHAUSTED",
+                reason:
+                  "DAILY_BUDGET_EXHAUSTED",
               };
             }
           }
 
-          const newEvent = await tx.adEvent.create({
-            data: {
-              eventId: event.eventId,
-              campaignId: event.campaignId,
-              userId: event.userId,
-              eventType: "click",
-              costMicros: chargeMicros,
-            },
-          });
+          const newEvent =
+            await tx.adEvent.create({
+              data: {
+                eventId,
+                campaignId:
+                  token.campaignId,
+                userId: token.userId,
+                eventType: "click",
+                costMicros: chargeMicros,
+              },
+            });
 
           await tx.campaign.update({
-            where: { id: event.campaignId },
+            where: {
+              id: token.campaignId,
+            },
             data: {
-              clicks: { increment: 1 },
+              clicks: {
+                increment: 1,
+              },
               ...(chargeMicros > 0n
                 ? {
                     spentMicros: {
-                      increment: chargeMicros,
+                      increment:
+                        chargeMicros,
                     },
                   }
                 : {}),
@@ -346,17 +415,20 @@ export async function recordClick(
         },
         {
           isolationLevel:
-            Prisma.TransactionIsolationLevel.Serializable,
+            Prisma.TransactionIsolationLevel
+              .Serializable,
         }
       );
     } catch (error) {
       if (
-        error instanceof Prisma.PrismaClientKnownRequestError
+        error instanceof
+        Prisma.PrismaClientKnownRequestError
       ) {
         if (error.code === "P2002") {
-          const existingEvent = await findDuplicateEvent(
-            event.eventId
-          );
+          const existingEvent =
+            await findDuplicateEvent(
+              eventId
+            );
 
           if (existingEvent) {
             return {
@@ -369,7 +441,8 @@ export async function recordClick(
 
         if (
           error.code === "P2034" &&
-          attempt < MAX_TRANSACTION_RETRIES
+          attempt <
+            MAX_TRANSACTION_RETRIES
         ) {
           continue;
         }

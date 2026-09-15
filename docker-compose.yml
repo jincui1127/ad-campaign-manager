@@ -23,7 +23,6 @@ services:
       timeout: 5s
       retries: 10
 
-
   backend:
     build:
       context: ./backend
@@ -31,6 +30,7 @@ services:
     environment:
       DATABASE_URL: postgresql://aduser:adpassword@db:5432/admanager
       PORT: 8000
+      AD_TOKEN_SECRET: ${AD_TOKEN_SECRET:?AD_TOKEN_SECRET is required}
 
     ports:
       - "8000:8000"
@@ -51,7 +51,6 @@ services:
       timeout: 5s
       retries: 10
 
-
   frontend:
     build:
       context: ./frontend
@@ -62,7 +61,6 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-
 
 volumes:
   admanager_postgres_data:

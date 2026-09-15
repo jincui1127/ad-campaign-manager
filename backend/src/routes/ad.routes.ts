@@ -2,6 +2,7 @@ import { Router } from "express";
 import { microsToDollars } from "../lib/money.js";
 import { adServeSchema } from "../schemas/ad.schema.js";
 import { selectAd } from "../services/ad-serving.service.js";
+import { issueAdToken } from "../services/ad-token.service.js";
 
 const router = Router();
 
@@ -10,7 +11,7 @@ router.post("/serve", async (req, res) => {
 
   if (!result.success) {
     return res.status(400).json({
-      error: "Invalid ad request",
+      error: "INVALID_AD_REQUEST",
       details: result.error.flatten(),
     });
   }
@@ -24,13 +25,23 @@ router.post("/serve", async (req, res) => {
     });
   }
 
+  const trackingToken = issueAdToken({
+    campaignId: campaign.id,
+    userId: result.data.userId,
+    bidType: campaign.bidType,
+    bidPriceMicros: campaign.bidPriceMicros,
+  });
+
   return res.json({
     campaignId: campaign.id,
     headline: campaign.headline,
     imageUrl: campaign.imageUrl,
     landingPageUrl: campaign.landingPageUrl,
-    bidPrice: microsToDollars(campaign.bidPriceMicros),
+    bidPrice: microsToDollars(
+      campaign.bidPriceMicros
+    ),
     bidType: campaign.bidType,
+    trackingToken,
   });
 });
 

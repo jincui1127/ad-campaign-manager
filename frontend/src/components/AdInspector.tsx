@@ -1,18 +1,15 @@
 import { useState } from "react";
-
 import {
   getCampaignById,
   recordClick,
   recordImpression,
   serveAd,
 } from "../api/client";
-
 import type {
   AdRequest,
   Campaign,
   ServedAd,
 } from "../types";
-
 
 const initialRequest: AdRequest = {
   userId: "demo_user",
@@ -21,29 +18,21 @@ const initialRequest: AdRequest = {
   category: "sports",
 };
 
-
 export default function AdInspector() {
   const [request, setRequest] =
     useState<AdRequest>(initialRequest);
-
   const [servedAd, setServedAd] =
     useState<ServedAd | null>(null);
-
   const [campaign, setCampaign] =
     useState<Campaign | null>(null);
-
   const [impressionRecorded, setImpressionRecorded] =
     useState(false);
-
   const [loading, setLoading] =
     useState(false);
-
   const [message, setMessage] =
     useState("");
-
   const [error, setError] =
     useState("");
-
 
   function updateRequestField(
     field: keyof AdRequest,
@@ -55,7 +44,6 @@ export default function AdInspector() {
     }));
   }
 
-
   async function refreshCampaign(
     campaignId: number
   ) {
@@ -64,7 +52,6 @@ export default function AdInspector() {
 
     setCampaign(latestCampaign);
   }
-
 
   async function handleRequestAd() {
     try {
@@ -87,7 +74,8 @@ export default function AdInspector() {
           : {}),
       };
 
-      const ad = await serveAd(requestData);
+      const ad =
+        await serveAd(requestData);
 
       if (!ad) {
         setMessage(
@@ -97,8 +85,9 @@ export default function AdInspector() {
       }
 
       setServedAd(ad);
-
-      await refreshCampaign(ad.campaignId);
+      await refreshCampaign(
+        ad.campaignId
+      );
     } catch (err) {
       setError(
         err instanceof Error
@@ -110,11 +99,8 @@ export default function AdInspector() {
     }
   }
 
-
   async function handleImpression() {
-    if (!servedAd) {
-      return;
-    }
+    if (!servedAd) return;
 
     try {
       setLoading(true);
@@ -122,8 +108,7 @@ export default function AdInspector() {
       setMessage("");
 
       await recordImpression(
-        servedAd.campaignId,
-        request.userId.trim()
+        servedAd.trackingToken
       );
 
       setImpressionRecorded(true);
@@ -146,11 +131,8 @@ export default function AdInspector() {
     }
   }
 
-
   async function handleClick() {
-    if (!servedAd) {
-      return;
-    }
+    if (!servedAd) return;
 
     try {
       setLoading(true);
@@ -158,8 +140,7 @@ export default function AdInspector() {
       setMessage("");
 
       await recordClick(
-        servedAd.campaignId,
-        request.userId.trim()
+        servedAd.trackingToken
       );
 
       await refreshCampaign(
@@ -180,13 +161,11 @@ export default function AdInspector() {
     }
   }
 
-
   return (
     <section className="inspector">
       <div className="inspector-header">
         <div>
           <h2>Ad Inspector</h2>
-
           <p>
             Simulate an ad request and verify
             delivery, budget and frequency
@@ -194,7 +173,6 @@ export default function AdInspector() {
           </p>
         </div>
       </div>
-
 
       <div className="inspector-layout">
         <div className="inspector-request">
@@ -240,11 +218,9 @@ export default function AdInspector() {
               <option value="mobile">
                 mobile
               </option>
-
               <option value="desktop">
                 desktop
               </option>
-
               <option value="tablet">
                 tablet
               </option>
@@ -254,7 +230,9 @@ export default function AdInspector() {
           <label>
             Category
             <input
-              value={request.category ?? ""}
+              value={
+                request.category ?? ""
+              }
               onChange={(event) =>
                 updateRequestField(
                   "category",
@@ -279,7 +257,6 @@ export default function AdInspector() {
           </button>
         </div>
 
-
         <div className="inspector-result">
           <h3>Winning Ad</h3>
 
@@ -299,8 +276,12 @@ export default function AdInspector() {
 
                 <div className="ad-image-container">
                   <img
-                    src={servedAd.imageUrl}
-                    alt={servedAd.headline}
+                    src={
+                      servedAd.imageUrl
+                    }
+                    alt={
+                      servedAd.headline
+                    }
                     onError={(event) => {
                       event.currentTarget.style.display =
                         "none";
@@ -309,17 +290,25 @@ export default function AdInspector() {
                 </div>
 
                 <p>
-                  <strong>Campaign ID:</strong>{" "}
+                  <strong>
+                    Campaign ID:
+                  </strong>{" "}
                   {servedAd.campaignId}
                 </p>
 
                 <p>
-                  <strong>Bid:</strong> $
-                  {servedAd.bidPrice.toFixed(2)}
+                  <strong>Bid:</strong>{" "}
+                  $
+                  {servedAd.bidPrice.toFixed(
+                    2
+                  )}{" "}
+                  {servedAd.bidType}
                 </p>
 
                 <a
-                  href={servedAd.landingPageUrl}
+                  href={
+                    servedAd.landingPageUrl
+                  }
                   target="_blank"
                   rel="noreferrer"
                 >
@@ -327,11 +316,12 @@ export default function AdInspector() {
                 </a>
               </div>
 
-
               <div className="inspector-actions">
                 <button
                   type="button"
-                  onClick={handleImpression}
+                  onClick={
+                    handleImpression
+                  }
                   disabled={loading}
                 >
                   Simulate Impression
@@ -339,7 +329,9 @@ export default function AdInspector() {
 
                 <button
                   type="button"
-                  onClick={handleClick}
+                  onClick={
+                    handleClick
+                  }
                   disabled={
                     loading ||
                     !impressionRecorded
@@ -350,7 +342,6 @@ export default function AdInspector() {
               </div>
             </>
           )}
-
 
           {message && (
             <p className="success-message">
@@ -366,15 +357,15 @@ export default function AdInspector() {
         </div>
       </div>
 
-
       {campaign && (
         <div className="inspector-metrics">
-          <h3>Live Campaign Metrics</h3>
+          <h3>
+            Live Campaign Metrics
+          </h3>
 
           <div className="metrics-grid">
             <div>
               <span>Status</span>
-
               <strong>
                 {campaign.isActive
                   ? "Active"
@@ -384,31 +375,40 @@ export default function AdInspector() {
 
             <div>
               <span>Spent</span>
-
               <strong>
-                ${campaign.spent.toFixed(2)}
+                $
+                {campaign.spent.toFixed(
+                  2
+                )}
               </strong>
             </div>
 
             <div>
-              <span>Total Budget</span>
-
+              <span>
+                Total Budget
+              </span>
               <strong>
-                ${campaign.totalBudget.toFixed(2)}
+                $
+                {campaign.totalBudget.toFixed(
+                  2
+                )}
               </strong>
             </div>
 
             <div>
-              <span>Daily Budget</span>
-
+              <span>
+                Daily Budget
+              </span>
               <strong>
-                ${campaign.dailyBudget.toFixed(2)}
+                $
+                {campaign.dailyBudget.toFixed(
+                  2
+                )}
               </strong>
             </div>
 
             <div>
               <span>Impressions</span>
-
               <strong>
                 {campaign.impressions}
               </strong>
@@ -416,7 +416,6 @@ export default function AdInspector() {
 
             <div>
               <span>Clicks</span>
-
               <strong>
                 {campaign.clicks}
               </strong>

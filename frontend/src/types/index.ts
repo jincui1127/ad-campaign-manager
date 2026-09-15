@@ -48,4 +48,5 @@ export interface ServedAd {
   landingPageUrl: string;
   bidPrice: number;
   bidType: BidType;
+  trackingToken: string;
 }

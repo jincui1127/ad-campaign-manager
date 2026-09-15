@@ -9,6 +9,9 @@ import {
 import type {
   TrackingFailureReason,
 } from "../services/tracking.service.js";
+import {
+  verifyAdToken,
+} from "../services/ad-token.service.js";
 
 const router = Router();
 
@@ -31,55 +34,159 @@ function toEventResponse(event: AdEvent) {
     campaignId: event.campaignId,
     userId: event.userId,
     eventType: event.eventType,
-    cost: microsToDollars(event.costMicros),
+    cost: microsToDollars(
+      event.costMicros
+    ),
     createdAt: event.createdAt,
   };
 }
 
-router.post("/impression", async (req, res) => {
-  const result = adEventSchema.safeParse(req.body);
+function verifyTrackingToken(
+  token: string
+) {
+  const verification =
+    verifyAdToken(token);
 
-  if (!result.success) {
-    return res.status(400).json({
-      error: "INVALID_IMPRESSION_EVENT",
-      details: result.error.flatten(),
-    });
+  if (!verification.ok) {
+    return verification;
   }
 
-  const trackingResult = await recordImpression(result.data);
+  return verification;
+}
 
-  if (!trackingResult.ok) {
+router.post(
+  "/impression",
+  async (req, res) => {
+    const result =
+      adEventSchema.safeParse(
+        req.body
+      );
+
+    if (!result.success) {
+      return res.status(400).json({
+        error:
+          "INVALID_IMPRESSION_EVENT",
+        details:
+          result.error.flatten(),
+      });
+    }
+
+    const verification =
+      verifyTrackingToken(
+        result.data.token
+      );
+
+    if (!verification.ok) {
+      return res
+        .status(
+          verification.reason ===
+            "EXPIRED_AD_TOKEN"
+            ? 410
+            : 400
+        )
+        .json({
+          error:
+            verification.reason,
+        });
+    }
+
+    const trackingResult =
+      await recordImpression(
+        verification.payload
+      );
+
+    if (!trackingResult.ok) {
+      return res
+        .status(
+          FAILURE_STATUS[
+            trackingResult.reason
+          ]
+        )
+        .json({
+          error:
+            trackingResult.reason,
+        });
+    }
+
     return res
-      .status(FAILURE_STATUS[trackingResult.reason])
-      .json({ error: trackingResult.reason });
+      .status(
+        trackingResult.deduped
+          ? 200
+          : 201
+      )
+      .json(
+        toEventResponse(
+          trackingResult.event
+        )
+      );
   }
+);
 
-  return res
-    .status(trackingResult.deduped ? 200 : 201)
-    .json(toEventResponse(trackingResult.event));
-});
+router.post(
+  "/click",
+  async (req, res) => {
+    const result =
+      adEventSchema.safeParse(
+        req.body
+      );
 
-router.post("/click", async (req, res) => {
-  const result = adEventSchema.safeParse(req.body);
+    if (!result.success) {
+      return res.status(400).json({
+        error: "INVALID_CLICK_EVENT",
+        details:
+          result.error.flatten(),
+      });
+    }
 
-  if (!result.success) {
-    return res.status(400).json({
-      error: "INVALID_CLICK_EVENT",
-      details: result.error.flatten(),
-    });
-  }
+    const verification =
+      verifyTrackingToken(
+        result.data.token
+      );
 
-  const trackingResult = await recordClick(result.data);
+    if (!verification.ok) {
+      return res
+        .status(
+          verification.reason ===
+            "EXPIRED_AD_TOKEN"
+            ? 410
+            : 400
+        )
+        .json({
+          error:
+            verification.reason,
+        });
+    }
 
-  if (!trackingResult.ok) {
+    const trackingResult =
+      await recordClick(
+        verification.payload
+      );
+
+    if (!trackingResult.ok) {
+      return res
+        .status(
+          FAILURE_STATUS[
+            trackingResult.reason
+          ]
+        )
+        .json({
+          error:
+            trackingResult.reason,
+        });
+    }
+
     return res
-      .status(FAILURE_STATUS[trackingResult.reason])
-      .json({ error: trackingResult.reason });
+      .status(
+        trackingResult.deduped
+          ? 200
+          : 201
+      )
+      .json(
+        toEventResponse(
+          trackingResult.event
+        )
+      );
   }
-
-  return res
-    .status(trackingResult.deduped ? 200 : 201)
-    .json(toEventResponse(trackingResult.event));
-});
+);
 
 export default router;
