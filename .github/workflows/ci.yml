@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  backend:
+    name: Backend checks
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+
+        env:
+          POSTGRES_USER: aduser
+          POSTGRES_PASSWORD: adpassword
+          POSTGRES_DB: admanager_test
+
+        ports:
+          - 5432:5432
+
+        options: >-
+          --health-cmd="pg_isready -U aduser -d admanager_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    defaults:
+      run:
+        working-directory: backend
+
+    env:
+      DATABASE_URL: postgresql://aduser:adpassword@localhost:5432/admanager_test
+      AD_TOKEN_SECRET: ci-token-secret-that-is-longer-than-32-characters
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Apply database migrations
+        run: npx prisma migrate deploy
+
+      - name: Run backend typecheck
+        run: npm run typecheck
+
+      - name: Run backend tests
+        run: npm test
+
+  frontend:
+    name: Frontend checks
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run frontend lint
+        run: npm run lint
+
+      - name: Build frontend
+        run: npm run build
