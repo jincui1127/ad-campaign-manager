@@ -3,21 +3,40 @@ import { getCampaigns, updateCampaign } from "../api/client";
 import type { Campaign } from "../types";
 import CampaignForm from "./CampaignForm";
 
+const REFRESH_INTERVAL_MS = 5000;
+
 function displayTarget(values: string[], fallback: string) {
   return values.length > 0 ? values.join(", ") : fallback;
+}
+
+function getCtr(campaign: Campaign) {
+  if (campaign.impressions === 0) {
+    return "0.00%";
+  }
+
+  return `${(
+    (campaign.clicks / campaign.impressions) *
+    100
+  ).toFixed(2)}%`;
 }
 
 export default function CampaignDashboard() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editingCampaign, setEditingCampaign] =
     useState<Campaign | null>(null);
 
-  async function loadCampaigns() {
+  async function loadCampaigns(showLoading = false) {
     try {
-      setLoading(true);
+      if (showLoading) {
+        setLoading(true);
+      } else {
+        setRefreshing(true);
+      }
+
       setError("");
       setCampaigns(await getCampaigns());
     } catch (err) {
@@ -27,12 +46,24 @@ export default function CampaignDashboard() {
           : "Failed to load campaigns"
       );
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      } else {
+        setRefreshing(false);
+      }
     }
   }
 
   useEffect(() => {
-    loadCampaigns();
+    void loadCampaigns(true);
+
+    const intervalId = window.setInterval(() => {
+      void loadCampaigns();
+    }, REFRESH_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
   }, []);
 
   async function toggleCampaignStatus(campaign: Campaign) {
@@ -91,8 +122,10 @@ export default function CampaignDashboard() {
       <div className="dashboard-header">
         <div>
           <h2>Campaign Dashboard</h2>
+
           <p>
             Monitor campaign delivery, budgets and performance.
+            Metrics refresh automatically every 5 seconds.
           </p>
         </div>
 
@@ -101,8 +134,12 @@ export default function CampaignDashboard() {
             + Create Campaign
           </button>
 
-          <button type="button" onClick={loadCampaigns}>
-            Refresh
+          <button
+            type="button"
+            onClick={() => void loadCampaigns()}
+            disabled={refreshing}
+          >
+            {refreshing ? "Refreshing..." : "Refresh"}
           </button>
         </div>
       </div>
@@ -129,6 +166,7 @@ export default function CampaignDashboard() {
               <th>Spent</th>
               <th>Impressions</th>
               <th>Clicks</th>
+              <th>CTR</th>
               <th>Action</th>
             </tr>
           </thead>
@@ -138,6 +176,7 @@ export default function CampaignDashboard() {
               <tr key={campaign.id}>
                 <td>
                   <strong>{campaign.name}</strong>
+
                   <div className="secondary-text">
                     {campaign.headline}
                   </div>
@@ -203,7 +242,10 @@ export default function CampaignDashboard() {
                 </td>
 
                 <td>{campaign.impressions}</td>
+
                 <td>{campaign.clicks}</td>
+
+                <td>{getCtr(campaign)}</td>
 
                 <td>
                   <div className="row-actions">
