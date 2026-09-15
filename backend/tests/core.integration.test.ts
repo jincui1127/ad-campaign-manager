@@ -541,3 +541,38 @@ describe("core ad delivery behaviour", () => {
     }
   );
 });
+
+
+  it(
+  "selects the highest eligible bid from many matching campaigns",
+  async () => {
+    for (let i = 1; i <= 20; i++) {
+      await createCampaign({
+        name: `Candidate ${i}`,
+        bidPriceMicros:
+          dollarsToMicros(i / 100),
+        countries: ["AU"],
+        devices: ["mobile"],
+        categories: ["sports"],
+      });
+    }
+
+    const highest = await createCampaign({
+      name: "Highest Bid",
+      bidPriceMicros:
+        dollarsToMicros(1.5),
+      countries: ["AU"],
+      devices: ["mobile"],
+      categories: ["sports"],
+    });
+
+    const ad = await selectAd({
+      userId: "bulk-selection-user",
+      country: "AU",
+      device: "mobile",
+      category: "sports",
+    });
+
+    expect(ad?.id).toBe(highest.id);
+  }
+);

@@ -1,49 +1,23 @@
 import { prisma } from "../lib/prisma.js";
 import { AD_CONFIG } from "../config/ad.config.js";
 
-export async function hasReachedFrequencyCap(
-  userId: string,
-  campaignId: number
-): Promise<boolean> {
-  const windowStart = new Date(
-    Date.now() -
-      AD_CONFIG.frequencyWindowHours * 60 * 60 * 1000
-  );
-
-  const impressionCount = await prisma.adEvent.count({
-    where: {
-      userId,
-      campaignId,
-      eventType: "impression",
-      createdAt: { gte: windowStart },
-    },
-  });
-
-  return impressionCount >= AD_CONFIG.frequencyCap;
-}
-
-export async function getDailySpend(
-  campaignId: number
-): Promise<bigint> {
+function getUtcDayStart(): Date {
   const now = new Date();
 
-  const dayStart = new Date(
+  return new Date(
     Date.UTC(
       now.getUTCFullYear(),
       now.getUTCMonth(),
       now.getUTCDate()
     )
   );
+}
 
-  const result = await prisma.adEvent.aggregate({
-    where: {
-      campaignId,
-      createdAt: { gte: dayStart },
-    },
-    _sum: { costMicros: true },
-  });
-
-  return result._sum.costMicros ?? 0n;
+function getFrequencyWindowStart(): Date {
+  return new Date(
+    Date.now() -
+      AD_CONFIG.frequencyWindowHours * 60 * 60 * 1000
+  );
 }
 
 export async function selectAd(request: {
@@ -89,29 +63,108 @@ export async function selectAd(request: {
     ],
   });
 
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  const candidateIds = candidates.map(
+    (campaign) => campaign.id
+  );
+
+  const dayStart = getUtcDayStart();
+  const frequencyWindowStart =
+    getFrequencyWindowStart();
+
+  const [dailySpendRows, frequencyRows] =
+    await Promise.all([
+      prisma.adEvent.groupBy({
+        by: ["campaignId"],
+        where: {
+          campaignId: {
+            in: candidateIds,
+          },
+          createdAt: {
+            gte: dayStart,
+          },
+        },
+        _sum: {
+          costMicros: true,
+        },
+      }),
+
+      prisma.adEvent.groupBy({
+        by: ["campaignId"],
+        where: {
+          campaignId: {
+            in: candidateIds,
+          },
+          userId: request.userId,
+          eventType: "impression",
+          createdAt: {
+            gte: frequencyWindowStart,
+          },
+        },
+        _count: {
+          _all: true,
+        },
+      }),
+    ]);
+
+  const dailySpendByCampaign =
+    new Map<number, bigint>();
+
+  for (const row of dailySpendRows) {
+    dailySpendByCampaign.set(
+      row.campaignId,
+      row._sum.costMicros ?? 0n
+    );
+  }
+
+  const frequencyByCampaign =
+    new Map<number, number>();
+
+  for (const row of frequencyRows) {
+    frequencyByCampaign.set(
+      row.campaignId,
+      row._count._all
+    );
+  }
+
   for (const campaign of candidates) {
     if (
-      campaign.spentMicros + campaign.bidPriceMicros >
+      campaign.spentMicros +
+        campaign.bidPriceMicros >
       campaign.totalBudgetMicros
     ) {
       continue;
     }
 
-    const dailySpend = await getDailySpend(campaign.id);
+    const dailySpend =
+      dailySpendByCampaign.get(
+        campaign.id
+      ) ?? 0n;
 
     if (
-      dailySpend + campaign.bidPriceMicros >
+      dailySpend +
+        campaign.bidPriceMicros >
       campaign.dailyBudgetMicros
     ) {
       continue;
     }
 
-    const capped = await hasReachedFrequencyCap(
-      request.userId,
-      campaign.id
-    );
+    const impressionCount =
+      frequencyByCampaign.get(
+        campaign.id
+      ) ?? 0;
 
-    if (!capped) return campaign;
+    if (
+      impressionCount >=
+      AD_CONFIG.frequencyCap
+    ) {
+      continue;
+    }
+
+    return campaign;
   }
 
   return null;
