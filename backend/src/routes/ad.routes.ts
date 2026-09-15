@@ -1,11 +1,9 @@
 import { Router } from "express";
-
+import { microsToDollars } from "../lib/money.js";
 import { adServeSchema } from "../schemas/ad.schema.js";
 import { selectAd } from "../services/ad-serving.service.js";
 
-
 const router = Router();
-
 
 router.post("/serve", async (req, res) => {
   const result = adServeSchema.safeParse(req.body);
@@ -31,9 +29,9 @@ router.post("/serve", async (req, res) => {
     headline: campaign.headline,
     imageUrl: campaign.imageUrl,
     landingPageUrl: campaign.landingPageUrl,
-    bidPrice: campaign.bidPrice,
+    bidPrice: microsToDollars(campaign.bidPriceMicros),
+    bidType: campaign.bidType,
   });
 });
-
 
 export default router;

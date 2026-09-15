@@ -1,22 +1,12 @@
 import { useEffect, useState } from "react";
-
-import {
-  createCampaign,
-  updateCampaign,
-} from "../api/client";
-
-import type {
-  Campaign,
-  CampaignInput,
-} from "../types";
-
+import { createCampaign, updateCampaign } from "../api/client";
+import type { Campaign, CampaignInput } from "../types";
 
 interface CampaignFormProps {
   campaign: Campaign | null;
   onSaved: () => void;
   onCancel: () => void;
 }
-
 
 const emptyForm: CampaignInput = {
   name: "",
@@ -26,26 +16,20 @@ const emptyForm: CampaignInput = {
   totalBudget: 100,
   dailyBudget: 20,
   bidPrice: 0.5,
+  bidType: "CPI",
   country: "AU",
   device: "mobile",
   category: "",
 };
-
 
 export default function CampaignForm({
   campaign,
   onSaved,
   onCancel,
 }: CampaignFormProps) {
-  const [formData, setFormData] =
-    useState<CampaignInput>(emptyForm);
-
-  const [saving, setSaving] =
-    useState(false);
-
-  const [error, setError] =
-    useState("");
-
+  const [formData, setFormData] = useState<CampaignInput>(emptyForm);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (campaign) {
@@ -53,20 +37,14 @@ export default function CampaignForm({
         name: campaign.name,
         headline: campaign.headline,
         imageUrl: campaign.imageUrl,
-        landingPageUrl:
-          campaign.landingPageUrl,
-        totalBudget:
-          campaign.totalBudget,
-        dailyBudget:
-          campaign.dailyBudget,
-        bidPrice:
-          campaign.bidPrice,
-        country:
-          campaign.country,
-        device:
-          campaign.device,
-        category:
-          campaign.category ?? "",
+        landingPageUrl: campaign.landingPageUrl,
+        totalBudget: campaign.totalBudget,
+        dailyBudget: campaign.dailyBudget,
+        bidPrice: campaign.bidPrice,
+        bidType: campaign.bidType,
+        country: campaign.country,
+        device: campaign.device,
+        category: campaign.category ?? "",
       });
     } else {
       setFormData(emptyForm);
@@ -75,10 +53,7 @@ export default function CampaignForm({
     setError("");
   }, [campaign]);
 
-
-  function updateField<
-    K extends keyof CampaignInput
-  >(
+  function updateField<K extends keyof CampaignInput>(
     field: K,
     value: CampaignInput[K]
   ) {
@@ -87,7 +62,6 @@ export default function CampaignForm({
       [field]: value,
     }));
   }
-
 
   async function handleSubmit(
     event: React.FormEvent<HTMLFormElement>
@@ -100,17 +74,13 @@ export default function CampaignForm({
 
       const data: CampaignInput = {
         ...formData,
-        category:
-          formData.category?.trim()
-            ? formData.category.trim()
-            : null,
+        category: formData.category?.trim()
+          ? formData.category.trim()
+          : null,
       };
 
       if (campaign) {
-        await updateCampaign(
-          campaign.id,
-          data
-        );
+        await updateCampaign(campaign.id, data);
       } else {
         await createCampaign(data);
       }
@@ -127,44 +97,26 @@ export default function CampaignForm({
     }
   }
 
-
   return (
     <section className="campaign-form-section">
       <div className="form-header">
-        <h2>
-          {campaign
-            ? "Edit Campaign"
-            : "Create Campaign"}
-        </h2>
+        <h2>{campaign ? "Edit Campaign" : "Create Campaign"}</h2>
 
-        <button
-          type="button"
-          onClick={onCancel}
-        >
+        <button type="button" onClick={onCancel}>
           Cancel
         </button>
       </div>
 
-      {error && (
-        <p className="error-message">
-          {error}
-        </p>
-      )}
+      {error && <p className="error-message">{error}</p>}
 
-      <form
-        className="campaign-form"
-        onSubmit={handleSubmit}
-      >
+      <form className="campaign-form" onSubmit={handleSubmit}>
         <label>
           Campaign Name
           <input
             required
             value={formData.name}
             onChange={(event) =>
-              updateField(
-                "name",
-                event.target.value
-              )
+              updateField("name", event.target.value)
             }
           />
         </label>
@@ -175,10 +127,7 @@ export default function CampaignForm({
             required
             value={formData.headline}
             onChange={(event) =>
-              updateField(
-                "headline",
-                event.target.value
-              )
+              updateField("headline", event.target.value)
             }
           />
         </label>
@@ -190,10 +139,7 @@ export default function CampaignForm({
             type="url"
             value={formData.imageUrl}
             onChange={(event) =>
-              updateField(
-                "imageUrl",
-                event.target.value
-              )
+              updateField("imageUrl", event.target.value)
             }
           />
         </label>
@@ -203,14 +149,9 @@ export default function CampaignForm({
           <input
             required
             type="url"
-            value={
-              formData.landingPageUrl
-            }
+            value={formData.landingPageUrl}
             onChange={(event) =>
-              updateField(
-                "landingPageUrl",
-                event.target.value
-              )
+              updateField("landingPageUrl", event.target.value)
             }
           />
         </label>
@@ -222,14 +163,9 @@ export default function CampaignForm({
             type="number"
             min="0.01"
             step="0.01"
-            value={
-              formData.totalBudget
-            }
+            value={formData.totalBudget}
             onChange={(event) =>
-              updateField(
-                "totalBudget",
-                Number(event.target.value)
-              )
+              updateField("totalBudget", Number(event.target.value))
             }
           />
         </label>
@@ -241,14 +177,9 @@ export default function CampaignForm({
             type="number"
             min="0.01"
             step="0.01"
-            value={
-              formData.dailyBudget
-            }
+            value={formData.dailyBudget}
             onChange={(event) =>
-              updateField(
-                "dailyBudget",
-                Number(event.target.value)
-              )
+              updateField("dailyBudget", Number(event.target.value))
             }
           />
         </label>
@@ -262,12 +193,25 @@ export default function CampaignForm({
             step="0.01"
             value={formData.bidPrice}
             onChange={(event) =>
-              updateField(
-                "bidPrice",
-                Number(event.target.value)
-              )
+              updateField("bidPrice", Number(event.target.value))
             }
           />
+        </label>
+
+        <label>
+          Bid Type
+          <select
+            value={formData.bidType}
+            onChange={(event) =>
+              updateField(
+                "bidType",
+                event.target.value as CampaignInput["bidType"]
+              )
+            }
+          >
+            <option value="CPI">CPI</option>
+            <option value="CPC">CPC</option>
+          </select>
         </label>
 
         <label>
@@ -276,10 +220,7 @@ export default function CampaignForm({
             required
             value={formData.country}
             onChange={(event) =>
-              updateField(
-                "country",
-                event.target.value
-              )
+              updateField("country", event.target.value)
             }
           />
         </label>
@@ -289,46 +230,27 @@ export default function CampaignForm({
           <select
             value={formData.device}
             onChange={(event) =>
-              updateField(
-                "device",
-                event.target.value
-              )
+              updateField("device", event.target.value)
             }
           >
-            <option value="mobile">
-              mobile
-            </option>
-
-            <option value="desktop">
-              desktop
-            </option>
-
-            <option value="tablet">
-              tablet
-            </option>
+            <option value="mobile">mobile</option>
+            <option value="desktop">desktop</option>
+            <option value="tablet">tablet</option>
           </select>
         </label>
 
         <label>
           Category
           <input
-            value={
-              formData.category ?? ""
-            }
+            value={formData.category ?? ""}
             onChange={(event) =>
-              updateField(
-                "category",
-                event.target.value
-              )
+              updateField("category", event.target.value)
             }
           />
         </label>
 
         <div className="form-actions">
-          <button
-            type="submit"
-            disabled={saving}
-          >
+          <button type="submit" disabled={saving}>
             {saving
               ? "Saving..."
               : campaign

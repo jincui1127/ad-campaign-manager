@@ -1,23 +1,16 @@
-import {
-  Router,
-} from "express";
-
-import {
-  adEventSchema,
-} from "../schemas/event.schema.js";
-
+import { Router } from "express";
+import type { AdEvent } from "../generated/prisma/client.js";
+import { microsToDollars } from "../lib/money.js";
+import { adEventSchema } from "../schemas/event.schema.js";
 import {
   recordClick,
   recordImpression,
 } from "../services/tracking.service.js";
-
 import type {
   TrackingFailureReason,
 } from "../services/tracking.service.js";
 
-
 const router = Router();
-
 
 const FAILURE_STATUS: Record<
   TrackingFailureReason,
@@ -31,107 +24,62 @@ const FAILURE_STATUS: Record<
   NO_PRIOR_IMPRESSION: 409,
 };
 
+function toEventResponse(event: AdEvent) {
+  return {
+    id: event.id,
+    eventId: event.eventId,
+    campaignId: event.campaignId,
+    userId: event.userId,
+    eventType: event.eventType,
+    cost: microsToDollars(event.costMicros),
+    createdAt: event.createdAt,
+  };
+}
 
-router.post(
-  "/impression",
-  async (req, res) => {
-    const result =
-      adEventSchema.safeParse(
-        req.body
-      );
+router.post("/impression", async (req, res) => {
+  const result = adEventSchema.safeParse(req.body);
 
-    if (!result.success) {
-      return res
-        .status(400)
-        .json({
-          error:
-            "INVALID_IMPRESSION_EVENT",
-
-          details:
-            result.error.flatten(),
-        });
-    }
-
-    const trackingResult =
-      await recordImpression(
-        result.data
-      );
-
-    if (!trackingResult.ok) {
-      return res
-        .status(
-          FAILURE_STATUS[
-            trackingResult.reason
-          ]
-        )
-        .json({
-          error:
-            trackingResult.reason,
-        });
-    }
-
-    return res
-      .status(
-        trackingResult.deduped
-          ? 200
-          : 201
-      )
-      .json(
-        trackingResult.event
-      );
+  if (!result.success) {
+    return res.status(400).json({
+      error: "INVALID_IMPRESSION_EVENT",
+      details: result.error.flatten(),
+    });
   }
-);
 
+  const trackingResult = await recordImpression(result.data);
 
-router.post(
-  "/click",
-  async (req, res) => {
-    const result =
-      adEventSchema.safeParse(
-        req.body
-      );
-
-    if (!result.success) {
-      return res
-        .status(400)
-        .json({
-          error:
-            "INVALID_CLICK_EVENT",
-
-          details:
-            result.error.flatten(),
-        });
-    }
-
-    const trackingResult =
-      await recordClick(
-        result.data
-      );
-
-    if (!trackingResult.ok) {
-      return res
-        .status(
-          FAILURE_STATUS[
-            trackingResult.reason
-          ]
-        )
-        .json({
-          error:
-            trackingResult.reason,
-        });
-    }
-
+  if (!trackingResult.ok) {
     return res
-      .status(
-        trackingResult.deduped
-          ? 200
-          : 201
-      )
-      .json(
-        trackingResult.event
-      );
+      .status(FAILURE_STATUS[trackingResult.reason])
+      .json({ error: trackingResult.reason });
   }
-);
 
+  return res
+    .status(trackingResult.deduped ? 200 : 201)
+    .json(toEventResponse(trackingResult.event));
+});
+
+router.post("/click", async (req, res) => {
+  const result = adEventSchema.safeParse(req.body);
+
+  if (!result.success) {
+    return res.status(400).json({
+      error: "INVALID_CLICK_EVENT",
+      details: result.error.flatten(),
+    });
+  }
+
+  const trackingResult = await recordClick(result.data);
+
+  if (!trackingResult.ok) {
+    return res
+      .status(FAILURE_STATUS[trackingResult.reason])
+      .json({ error: trackingResult.reason });
+  }
+
+  return res
+    .status(trackingResult.deduped ? 200 : 201)
+    .json(toEventResponse(trackingResult.event));
+});
 
 export default router;

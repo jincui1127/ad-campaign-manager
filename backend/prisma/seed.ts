@@ -1,4 +1,5 @@
 import { prisma } from "../src/lib/prisma.js";
+import { dollarsToMicros } from "../src/lib/money.js";
 
 async function main() {
   console.log("Seeding database...");
@@ -11,13 +12,12 @@ async function main() {
       {
         name: "Nike Running AU",
         headline: "Run Faster with Nike",
-        imageUrl:
-          "https://placehold.co/600x300?text=Nike+Running",
-        landingPageUrl:
-          "https://example.com/nike-running",
-        totalBudget: 100,
-        dailyBudget: 20,
-        bidPrice: 0.8,
+        imageUrl: "https://placehold.co/600x300?text=Nike+Running",
+        landingPageUrl: "https://example.com/nike-running",
+        totalBudgetMicros: dollarsToMicros(100),
+        dailyBudgetMicros: dollarsToMicros(20),
+        bidPriceMicros: dollarsToMicros(0.8),
+        bidType: "CPI",
         country: "AU",
         device: "mobile",
         category: "sports",
@@ -26,13 +26,12 @@ async function main() {
       {
         name: "Adidas Sports AU",
         headline: "Impossible Is Nothing",
-        imageUrl:
-          "https://placehold.co/600x300?text=Adidas+Sports",
-        landingPageUrl:
-          "https://example.com/adidas",
-        totalBudget: 120,
-        dailyBudget: 25,
-        bidPrice: 0.6,
+        imageUrl: "https://placehold.co/600x300?text=Adidas+Sports",
+        landingPageUrl: "https://example.com/adidas",
+        totalBudgetMicros: dollarsToMicros(120),
+        dailyBudgetMicros: dollarsToMicros(25),
+        bidPriceMicros: dollarsToMicros(0.6),
+        bidType: "CPC",
         country: "AU",
         device: "mobile",
         category: "sports",
@@ -41,13 +40,12 @@ async function main() {
       {
         name: "Tech Campaign AU",
         headline: "Discover the Latest Technology",
-        imageUrl:
-          "https://placehold.co/600x300?text=Technology",
-        landingPageUrl:
-          "https://example.com/tech",
-        totalBudget: 80,
-        dailyBudget: 15,
-        bidPrice: 0.5,
+        imageUrl: "https://placehold.co/600x300?text=Technology",
+        landingPageUrl: "https://example.com/tech",
+        totalBudgetMicros: dollarsToMicros(80),
+        dailyBudgetMicros: dollarsToMicros(15),
+        bidPriceMicros: dollarsToMicros(0.5),
+        bidType: "CPI",
         country: "AU",
         device: "desktop",
         category: "technology",
@@ -56,13 +54,12 @@ async function main() {
       {
         name: "Paused Campaign",
         headline: "Paused Advertisement",
-        imageUrl:
-          "https://placehold.co/600x300?text=Paused+Campaign",
-        landingPageUrl:
-          "https://example.com/paused",
-        totalBudget: 100,
-        dailyBudget: 20,
-        bidPrice: 1.2,
+        imageUrl: "https://placehold.co/600x300?text=Paused+Campaign",
+        landingPageUrl: "https://example.com/paused",
+        totalBudgetMicros: dollarsToMicros(100),
+        dailyBudgetMicros: dollarsToMicros(20),
+        bidPriceMicros: dollarsToMicros(1.2),
+        bidType: "CPI",
         country: "AU",
         device: "mobile",
         category: "sports",

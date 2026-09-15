@@ -1,3 +1,5 @@
+export type BidType = "CPI" | "CPC";
+
 export interface Campaign {
   id: number;
   name: string;
@@ -7,6 +9,7 @@ export interface Campaign {
   totalBudget: number;
   dailyBudget: number;
   bidPrice: number;
+  bidType: BidType;
   country: string;
   device: string;
   category: string | null;
@@ -25,6 +28,7 @@ export interface CampaignInput {
   totalBudget: number;
   dailyBudget: number;
   bidPrice: number;
+  bidType: BidType;
   country: string;
   device: string;
   category?: string | null;
@@ -43,4 +47,5 @@ export interface ServedAd {
   imageUrl: string;
   landingPageUrl: string;
   bidPrice: number;
+  bidType: BidType;
 }

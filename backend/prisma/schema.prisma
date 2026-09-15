@@ -12,6 +12,10 @@ datasource db {
   provider = "postgresql"
 }
 
+enum BidType {
+  CPI
+  CPC
+}
 
 model Campaign {
   id             Int      @id @default(autoincrement())
@@ -21,19 +25,20 @@ model Campaign {
   imageUrl       String
   landingPageUrl String
 
-  totalBudget    Float
-  dailyBudget    Float
-  bidPrice       Float
+  totalBudgetMicros BigInt
+  dailyBudgetMicros BigInt
+  bidPriceMicros    BigInt
+  bidType           BidType @default(CPI)
 
   country        String
   device         String
   category       String?
 
-  isActive       Boolean  @default(true)
+  isActive       Boolean @default(true)
 
-  spent          Float    @default(0)
-  impressions    Int      @default(0)
-  clicks         Int      @default(0)
+  spentMicros    BigInt @default(0)
+  impressions    Int    @default(0)
+  clicks         Int    @default(0)
 
   createdAt      DateTime @default(now())
 
@@ -44,7 +49,6 @@ model Campaign {
   @@index([isActive])
 }
 
-
 model AdEvent {
   id         Int      @id @default(autoincrement())
 
@@ -54,7 +58,7 @@ model AdEvent {
   userId     String
   eventType  String
 
-  cost       Float    @default(0)
+  costMicros BigInt   @default(0)
 
   createdAt  DateTime @default(now())
 
