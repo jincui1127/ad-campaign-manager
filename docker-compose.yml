@@ -23,9 +23,24 @@ services:
       timeout: 5s
       retries: 10
 
+  migrate:
+    build:
+      context: ./backend
+      target: migration
+
+    environment:
+      DATABASE_URL: postgresql://aduser:adpassword@db:5432/admanager
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+    restart: "no"
+
   backend:
     build:
       context: ./backend
+      target: runtime
 
     environment:
       DATABASE_URL: postgresql://aduser:adpassword@db:5432/admanager
@@ -38,6 +53,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
     healthcheck:
       test:
