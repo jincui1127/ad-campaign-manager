@@ -20,6 +20,9 @@ RUN npm ci
 
 COPY prisma ./prisma
 COPY prisma7.config.ts ./
+COPY src ./src
+
+COPY --from=build /app/src/generated/prisma ./src/generated/prisma
 
 USER node
 
