@@ -1,126 +1,66 @@
 # Ad Campaign Manager & Real-Time Ad Delivery Engine
 
-A full-stack prototype for managing digital advertising campaigns and serving ads in real time based on targeting rules, budgets, bidding, and frequency capping.
-
-The application includes:
-
-- an Advertiser / Operations Dashboard for campaign management;
-- a real-time Ad Delivery Engine;
-- impression and click tracking;
-- budget and frequency-cap protection;
-- an interactive Ad Inspector for testing and demonstration.
-
----
+A full-stack advertising platform for campaign management, real-time ad delivery, impression/click tracking, budget protection, and frequency capping.
 
 ## 1. Tech Stack
 
-### Frontend
-- React
-- TypeScript
-- Vite
-- Native Fetch API
-- CSS
-- Nginx
-
-### Backend
-- Node.js
-- TypeScript
-- Express
-- Zod
-- Prisma
-- PostgreSQL adapter
-
-### Database and Runtime
-- PostgreSQL 16
-- Docker
-- Docker Compose
-
----
+- Frontend: React 19, TypeScript, Vite, Native Fetch API, CSS, Nginx
+- Backend: Node.js 22, TypeScript, Express 5, Zod, Prisma 7, `@prisma/adapter-pg`, `pg`
+- Database: PostgreSQL 16
+- Runtime: Docker, Docker Compose
+- CI: GitHub Actions
 
 ## 2. Main Features
 
 ### Campaign Management
 
-Operators can create, edit, activate, and pause campaigns, and configure:
+Operators can create, edit, activate, and pause campaigns; configure creative URLs; set total/daily budgets; choose CPI or CPC bidding; and target multiple countries, devices, and categories.
 
-- campaign name;
-- headline;
-- image URL;
-- landing page URL;
-- total budget;
-- daily budget;
-- bid price;
-- country targeting;
-- device targeting;
-- category targeting.
+An empty targeting list means unrestricted targeting for that field.
 
-The dashboard displays campaign status, targeting, bid price, total/daily budget, spend, impressions, and clicks.
+The dashboard shows status, targeting, bid, budgets, spend, impressions, clicks, and CTR. Metrics refresh automatically every 5 seconds.
 
 ### Real-Time Ad Serving
 
-A client can request an ad using visitor context such as User ID, Country, Device, and Category.
+`POST /ads/serve` accepts `userId`, `country`, `device`, and optional `category`.
 
-The delivery engine filters out campaigns that are:
+The engine excludes campaigns that are inactive, outside the visitor's targeting rules, unable to cover the next bid within total/daily budget, or frequency-capped for the user.
 
-- inactive;
-- outside the visitor's targeting criteria;
-- over the total budget;
-- over the daily budget;
-- frequency capped for that user.
+Eligible campaigns are ordered by highest bid. Campaign ID is the deterministic tie-breaker for equal bids.
 
-Among the remaining eligible campaigns, the highest bid wins.
+### CPI / CPC Billing
+
+- CPI: charge on impression.
+- CPC: charge on click.
+
+Money is stored internally as integer micro-units (`BigInt`) to avoid floating-point rounding errors.
 
 ### Frequency Capping
 
-The default rule is:
+Default:
 
 ```text
 3 impressions per user per campaign
 within a rolling 1-hour window
 ```
 
-The configuration is stored in:
+Configuration: `backend/src/config/ad.config.ts`.
 
-```text
-backend/src/config/ad.config.ts
-```
+### Secure Tracking and Idempotency
 
-### Impression and Click Tracking
+`/ads/serve` returns an HMAC-signed tracking token containing campaign, user, bid terms, a unique opportunity ID (`jti`), and expiry.
 
-Impression tracking:
+Tracking endpoints accept the signed token instead of client-supplied campaign/user IDs. Impression and click event IDs are derived from the opportunity ID, so retries do not double-count. A click is accepted only when the exact matching impression opportunity already exists.
 
-- creates an `AdEvent`;
-- increments campaign impressions;
-- increases campaign spend by the bid price;
-- checks frequency and budget limits.
+### Concurrency and Query Efficiency
 
-Click tracking:
+Tracking uses PostgreSQL row-level locking on the affected campaign, preventing concurrent budget/frequency over-delivery while allowing unrelated campaigns to proceed independently.
 
-- creates an `AdEvent`;
-- increments campaign clicks;
-- requires a previous impression for the same user and campaign;
-- does not add spend because this prototype uses CPI billing.
-
-### Idempotency and Concurrency
-
-Each tracking request uses a unique `eventId` to prevent double counting.
-
-Impression processing uses serializable database transactions with retry handling to protect against concurrent budget over-delivery, frequency-cap race conditions, and duplicate event insertion.
+Ad selection avoids per-candidate N+1 queries by batching daily-spend and frequency aggregates. GIN targeting indexes and compound event indexes support the main query paths.
 
 ### Ad Inspector
 
-The frontend includes an interactive Ad Inspector that can:
-
-1. simulate a visitor request;
-2. request the winning ad;
-3. render the returned creative;
-4. simulate an impression;
-5. simulate a click;
-6. display updated campaign metrics;
-7. demonstrate frequency-cap behaviour;
-8. demonstrate targeting and no-match behaviour.
-
----
+The Ad Inspector can simulate visitor context, request the winning ad, render the creative, record impression/click events, show updated metrics, and demonstrate targeting, budget, frequency-cap, and no-match behaviour.
 
 ## 3. Architecture
 
@@ -129,227 +69,127 @@ Browser
    |
    | http://localhost:5173
    v
-Frontend Container
-Nginx :80
+Frontend Container (Nginx :80)
    |
    | /api/*
    v
-Backend Container
-Express :8000
+Backend Container (Express :8000)
    |
-   | Prisma
+   | Prisma Client + PostgreSQL adapter
    v
-Database Container
-PostgreSQL :5432
+Database Container (PostgreSQL :5432)
 ```
 
-Docker Compose runs all three services on the same internal network.
-
-Container-to-container communication uses Docker Compose service names:
+Docker Compose startup:
 
 ```text
-frontend -> backend:8000
-backend  -> db:5432
+db (healthy)
+   ↓
+migrate (one-shot)
+   ↓
+backend (healthy)
+   ↓
+frontend
 ```
 
-The host machine uses the published ports:
-
-```text
-Frontend:   http://localhost:5173
-Backend:    http://localhost:8000
-PostgreSQL: localhost:5432
-```
-
-The frontend Nginx server proxies `/api/*` requests to the backend service.
-
----
+The production backend runs compiled JavaScript as the non-root `node` user and installs production dependencies only. Prisma CLI, TypeScript, `tsx`, Vitest, and source-only tooling are kept out of the long-running backend runtime.
 
 ## 4. Project Structure
 
 ```text
 ad-campaign-manager/
+├── .github/workflows/ci.yml
 ├── backend/
 │   ├── prisma/
 │   │   ├── migrations/
 │   │   ├── schema.prisma
 │   │   └── seed.ts
 │   ├── src/
-│   │   ├── config/
-│   │   ├── lib/
-│   │   ├── routes/
-│   │   ├── schemas/
-│   │   ├── services/
-│   │   └── index.ts
-│   ├── .dockerignore
+│   ├── tests/
 │   ├── Dockerfile
-│   ├── package.json
-│   ├── package-lock.json
 │   ├── prisma7.config.ts
-│   └── tsconfig.json
+│   ├── tsconfig.json
+│   └── tsconfig.build.json
 ├── frontend/
+│   ├── public/
 │   ├── src/
-│   │   ├── api/
-│   │   ├── components/
-│   │   ├── types/
-│   │   ├── App.tsx
-│   │   ├── App.css
-│   │   ├── index.css
-│   │   └── main.tsx
-│   ├── .dockerignore
 │   ├── Dockerfile
 │   ├── nginx.conf
-│   ├── package.json
-│   ├── package-lock.json
 │   └── vite.config.ts
 ├── docker-compose.yml
-├── .gitignore
+├── .env.example
 └── README.md
 ```
 
-`backend/src/generated/` contains generated Prisma Client code and is regenerated inside the backend container.
-
----
+Generated Prisma Client code and build output are not committed.
 
 ## 5. Quick Start with Docker Compose
 
 ### Prerequisites
 
-Install:
+- Docker Desktop, or Docker Engine with Docker Compose
+- Git
 
-- Docker Desktop, or Docker Engine with Docker Compose support;
-- Git.
+Node.js and npm are not required on the host for the Docker workflow.
 
-Node.js and npm are not required on the host when using the full Docker workflow.
-
-### Step 1: Clone the Repository
+### Step 1: Clone
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/jincui1127/ad-campaign-manager.git
 cd ad-campaign-manager
 ```
 
-### Step 2: Build and Start the Full Application
+### Step 2: Create `.env`
 
-From the project root:
+```bash
+cp .env.example .env
+```
+
+Generate a secret:
+
+```bash
+openssl rand -hex 32
+```
+
+Copy it into `.env` as `AD_TOKEN_SECRET`.
+
+### Step 3: Build and Start
 
 ```bash
 docker compose up --build -d
+docker compose ps -a
 ```
 
-This starts:
-
-- PostgreSQL 16;
-- the Node.js / Express backend;
-- the React frontend served by Nginx.
-
-The backend waits for PostgreSQL to become healthy before starting.
-
-The backend startup process also generates the Prisma Client, applies the existing Prisma migrations, and starts the Express server.
-
-### Step 3: Load the Demo Campaigns
-
-After all containers are running:
-
-```bash
-docker compose exec backend npm run seed
-```
-
-The seed script deletes existing `AdEvent` and `Campaign` rows, then creates a clean set of demo campaigns for evaluation.
-
-Run this command whenever you want to reset the application to the default demo data.
-
-### Step 4: Open the Application
-
-Frontend:
+Expected state:
 
 ```text
-http://localhost:5173
+db        healthy
+migrate   exited (0)
+backend   healthy
+frontend  running
 ```
 
-Backend API:
+`migrate` is a one-shot service, so `exited (0)` is expected.
 
-```text
-http://localhost:8000
-```
-
-PostgreSQL:
-
-```text
-localhost:5432
-```
-
-### Step 5: Check Container Status
+### Step 4: Load / Reset Demo Data
 
 ```bash
-docker compose ps
+docker compose run --rm migrate npx prisma db seed
 ```
 
-The expected services are:
+This starts a temporary tooling container from the existing `migrate` service configuration, seeds the same PostgreSQL database, and removes the temporary container afterward.
 
-```text
-db
-backend
-frontend
-```
+The seed script deletes existing `AdEvent` and `Campaign` rows before recreating demo campaigns.
 
-The database service should report a healthy status.
+### Step 5: Open
 
----
+Frontend: `http://localhost:5173`  
+Backend: `http://localhost:8000`  
+Health check: `http://localhost:8000/healthz`
 
-## 6. Docker Commands
+PostgreSQL is published at `localhost:5432`.
 
-### Start Existing Images
-
-```bash
-docker compose up -d
-```
-
-### Rebuild After Code Changes
-
-```bash
-docker compose up --build -d
-```
-
-### Stop the Application
-
-```bash
-docker compose down
-```
-
-This removes the containers and Compose network but keeps the PostgreSQL named volume.
-
-### Completely Remove Database Data
-
-Only use this when a full database reset is intentionally required:
-
-```bash
-docker compose down -v
-```
-
-This also deletes the PostgreSQL named volume. Normally, use `docker compose down` without `-v`.
-
----
-
-## 7. Demo Workflow
-
-After starting the application and running the seed command, open:
-
-```text
-http://localhost:5173
-```
-
-### Campaign Dashboard
-
-Use the dashboard to verify:
-
-- campaign creation;
-- campaign editing;
-- total and daily budget changes;
-- bid changes;
-- pause / activate actions;
-- campaign metrics.
-
-### Ad Inspector: Auction and Targeting
+## 6. Demo Workflow
 
 Example visitor:
 
@@ -360,208 +200,130 @@ Device: mobile
 Category: sports
 ```
 
-With the default seed data, the highest-bidding eligible campaign should win.
+1. Create/edit or pause/activate campaigns in the Dashboard.
+2. Click **Request Ad** in the Ad Inspector.
+3. Click **Simulate Impression**.
+4. Click **Simulate Click**.
+5. Observe updated metrics.
+6. Repeat impressions for the same user/campaign to demonstrate frequency capping.
+7. Change targeting inputs to demonstrate another winner or a no-ad result.
 
-### Ad Inspector: Impression and Click
+For CPI campaigns, the impression carries the charge. For CPC campaigns, the click carries the charge.
 
-After requesting an ad:
-
-1. click `Simulate Impression`;
-2. verify that impressions increase;
-3. verify that spend increases by the campaign bid price;
-4. click `Simulate Click`;
-5. verify that clicks increase while spend remains unchanged.
-
-### Ad Inspector: Frequency Cap
-
-For the same user and campaign, request the ad and record impressions until 3 impressions have been recorded within the rolling 1-hour window. On the next request, that campaign is no longer eligible for that user, so another eligible campaign can win.
-
-### Ad Inspector: No Match
-
-For example:
-
-```text
-Country: JP
-Device: tablet
-Category: finance
-```
-
-If no campaign matches, the application returns a graceful no-ad result.
-
----
-
-## 8. API Endpoints
-
-### Campaign APIs
+## 7. API
 
 | Method | Endpoint | Purpose |
 |---|---|---|
-| GET | `/campaigns` | Get all campaigns |
+| GET | `/campaigns` | List campaigns |
 | GET | `/campaigns/:id` | Get one campaign |
 | POST | `/campaigns` | Create a campaign |
-| PATCH | `/campaigns/:id` | Update a campaign |
+| PATCH | `/campaigns/:id` | Update, pause, or activate a campaign |
+| POST | `/ads/serve` | Select the highest-bidding eligible ad |
+| POST | `/events/impression` | Record an impression from a signed token |
+| POST | `/events/click` | Record a click from a signed token |
+| GET | `/healthz` | Database-backed health check |
 
-### Ad Delivery API
+When accessed through Nginx, frontend requests use `/api/*`; backend routes themselves do not include `/api`.
 
-| Method | Endpoint | Purpose |
-|---|---|---|
-| POST | `/ads/serve` | Select the winning eligible ad |
+## 8. Database and Delivery Rules
 
-### Tracking APIs
+`Campaign` stores creative data, CPI/CPC bid settings, targeting arrays, budgets, status, spend, impressions, and clicks.
 
-| Method | Endpoint | Purpose |
-|---|---|---|
-| POST | `/events/impression` | Record an impression |
-| POST | `/events/click` | Record a click |
+`AdEvent` stores unique event ID, campaign/user IDs, event type, event cost, and timestamp.
 
----
+Daily spend uses the UTC calendar day. Prisma migrations track schema evolution.
 
-## 9. Database Model
+## 9. Testing and CI
 
-### Campaign
+Backend integration tests use a real PostgreSQL test database and cover targeting/no-match behaviour, frequency capping, idempotency, HMAC token validation, exact click attribution, CPI/CPC billing, budget protection, concurrency, and highest-bid selection.
 
-Stores creative information, targeting, total/daily budgets, bid price, active status, spend, impressions, and clicks.
+Local backend checks:
 
-### AdEvent
-
-Stores individual delivery events, including unique event ID, campaign ID, user ID, event type, event cost, and creation time.
-
-Prisma also creates the internal `_prisma_migrations` table to track migration history.
-
----
-
-## 10. Implementation Notes
-
-### Billing Model
-
-The current prototype uses **Cost Per Impression (CPI)**.
-
-Each successful impression increases campaign spend by the campaign bid price. Clicks update click metrics but do not add additional spend.
-
-### Daily Budget
-
-Daily spend is calculated using the UTC calendar day.
-
-### Frequency Cap
-
-The current default is:
-
-```text
-3 impressions per user per campaign
-within a rolling 1-hour window
+```bash
+cd backend
+npm run typecheck
+npm test
+npm run build
 ```
 
-It is configurable in:
+Frontend checks:
 
-```text
-backend/src/config/ad.config.ts
+```bash
+cd frontend
+npm run lint
+npm run build
 ```
 
-### Persistence
+GitHub Actions runs backend type checking/tests and frontend lint/build on pushes and pull requests to `main`.
 
-PostgreSQL is the persistent source of truth.
+## 10. Optional Local Development
 
-Docker Compose stores database data in a named volume, so normal `docker compose down` / `docker compose up` cycles preserve the database.
+The Docker workflow above is the recommended reproduction path.
 
-### Frontend State
-
-The React frontend maintains local UI state. API requests and refresh actions retrieve the latest persisted data from the backend.
-
-### No-Match Handling
-
-When no campaign satisfies targeting, budget, activity, and frequency-cap rules, the ad-serving endpoint returns a no-ad result instead of failing the request.
-
----
-
-## 11. Manual Development Mode
-
-The Docker Compose workflow above is the recommended way to reproduce the full application.
-
-For local development with frontend/backend hot reload, PostgreSQL can remain in Docker while Node.js and Vite run on the host.
-
-### Start Only PostgreSQL
+Start PostgreSQL:
 
 ```bash
 docker compose up -d db
 ```
 
-### Backend
-
-Create `backend/.env` with:
+Create `backend/.env`:
 
 ```env
-DATABASE_URL="postgresql://aduser:adpassword@localhost:5432/admanager"
-```
-
-Then:
-
-```bash
-cd backend
-npm install
-npx prisma generate
-npx prisma migrate deploy
-npm run seed
-npm run dev
+DATABASE_URL=postgresql://aduser:adpassword@localhost:5432/admanager
+AD_TOKEN_SECRET=<your-secret-at-least-32-characters>
 ```
 
 Backend:
 
-```text
-http://localhost:8000
-```
-
-### Frontend
-
-In another terminal:
-
 ```bash
-cd frontend
-npm install
+cd backend
+npm ci
+npx prisma generate
+npx prisma migrate deploy
+npx prisma db seed
 npm run dev
 ```
 
-Vite development server:
-
-```text
-http://localhost:5173
-```
-
-During development, `vite.config.ts` proxies `/api/*` requests to the backend on port `8000`.
-
----
-
-## 12. Useful Development Checks
-
-Backend TypeScript check:
-
-```bash
-cd backend
-npm run typecheck
-```
-
-Frontend lint:
+Frontend:
 
 ```bash
 cd frontend
-npm run lint
+npm ci
+npm run dev
 ```
 
----
+Vite proxies `/api/*` to `http://localhost:8000`.
 
-## 13. Prototype Scope
+## 11. Useful Docker Commands
 
-The current implementation focuses on:
+```bash
+docker compose up -d
+docker compose up --build -d
+docker compose run --rm migrate npx prisma db seed
+docker compose down
+```
+
+To also remove the PostgreSQL volume:
+
+```bash
+docker compose down -v
+```
+
+Use `-v` only for a complete database reset.
+
+## 12. Prototype Scope
+
+This take-home focuses on:
 
 - campaign lifecycle management;
-- campaign creative and targeting configuration;
-- real-time eligibility filtering;
-- highest-bid auction;
-- CPI spend tracking;
+- multi-value targeting;
+- real-time eligibility filtering and highest-bid selection;
+- CPI/CPC billing;
 - impression and click tracking;
-- duplicate-event prevention;
+- idempotency and signed tracking tokens;
 - frequency capping;
 - total and daily budget protection;
-- concurrent impression handling;
+- concurrency-safe event processing;
 - persistent PostgreSQL storage;
-- full Docker Compose execution;
-- interactive verification through the Ad Inspector.
+- automated backend integration tests and CI;
+- Docker Compose based end-to-end execution.
